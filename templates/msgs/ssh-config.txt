@@ -1,0 +1,8 @@
+---
+Create or edit {{@.ssh.config}} to include
+
+Host {{cluster.head-node}}
+    HostName {{cluster.head-node}}
+    IdentityFile {{@.ssh.private-key}}
+    User {{cluster.user}}
+---

@@ -1,0 +1,17 @@
+---
+Run the Raspberry Pi Imager from https://www.raspberrypi.com/software/
+to create a base microSD card OS image.
+
+  - Choose the Raspberry Pi OS Lite (64-bit) OS
+  - Click the `Edit Settings` options and
+    - In the `General` tab
+      - Set hostname: {{cluster.head-node}}
+      - Set username: {{cluster.user}}
+      - Choose a password
+      - Configure the wireless LAN
+      - Set locale
+    - In the `Services` tab
+      - Click `Enable SSH`
+      - Click `Allow public-key authentication only`
+      - Paste the contents of {{@.ssh.public-key}} into the key field
+---
