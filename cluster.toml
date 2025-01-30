@@ -3,9 +3,13 @@ user       = "pi"
 head-node  = "pi-login"
 node-count = 32
 
+
 [ssh]
 key-name   = "pi-cluster"
 
 [node]
-mac.001 = "2c:cf:67:c6:7d:83"
-mac.002 = "2c:cf:67:c6:7d:52"
+prefix = "pi-"
+mac = [
+  "2c:cf:67:c6:7d:83",
+  "2c:cf:67:c6:7d:52",
+]

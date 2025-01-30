@@ -1,0 +1,11 @@
+default-lease-time 600;
+max-lease-time 7200;
+ddns-update-style none;
+use-host-decl-names on;
+
+subnet 10.0.0.0 netmask 255.0.0.0 {
+  option routers 10.0.0.1;
+  group {
+    option tftp-server-name "10.0.0.1";
+    option vendor-class-identifier "PXEClient";
+    option vendor-encapsulated-options "Raspberry Pi Boot";

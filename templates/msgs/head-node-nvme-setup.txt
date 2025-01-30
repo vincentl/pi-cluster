@@ -1,17 +1,15 @@
 ---
 Head Node NVMe Setup
 
-- Move the microSD card to the head node and boot
-- Stage NVMe setup script with `scp {{@.option.scripts}}/nvme-setup.sh {{cluster.user}}@{{cluster.head-node}}`
-- Connect to the head node with `ssh {{cluster.user}}@{{cluster.head-node}}`
-- Execute the script with `bash nvme-setup.sh`
-  - The script downloads the OS image
-  - Enables the NVMe device if required
-    - If a reboot is required, simply ssh back to the node after reboot and rerun nvem-setup.sh
-  - Customize the OS and stage to the NVMe device
-  - Resize the NVMe root partition
-- Shutdown with `sudo shutdown now`
-- Remove the microSD card
-- Boot the node again
-  - It will reboot itself once, about 20 seconds after first boot
+  - Move the microSD card to the head node and boot
+  - Stage NVMe setup script with `scp {{@.option.setup}}/nvme-setup.sh {{cluster.user}}@{{cluster.head-node}}:`
+  - Connect to the head node with `ssh {{cluster.user}}@{{cluster.head-node}}`
+  - Execute the script with `sudo ./nvme-setup.sh`
+    - Enables the NVMe device if required
+      - If a reboot is required, simply ssh back to the node after reboot and rerun nvem-setup.sh
+    - Mirror the running microSD card to the NVMe device
+    - Resize the NVMe root partition
+  - Shutdown with `sudo shutdown now`
+  - Remove the microSD card
+  - Boot the node again
 ---

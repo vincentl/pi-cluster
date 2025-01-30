@@ -1,5 +1,16 @@
 ---
 Network Boot Setup
 
-
+  - Stage Network Boot setup script with `scp {{@.option.setup}}/network-boot.sh {{cluster.user}}@{{cluster.head-node}}:`
+  - Stage configuration files with `scp {{@.option.setup}}/{hosts,isc-dhcp-server,dhcpd.conf} {{cluster.user}}@{{cluster.head-node}}:`
+  - Connect to the head node with `ssh {{cluster.user}}@{{cluster.head-node}}`
+  - Execute the script with `sudo ./network-boot.sh`
+    - The script may reboot the head node
+      - ssh back into the node after reboot
+      - run `sudo ./network-boot.sh` again
+    - Be prepared to insert the microSD card when prompted
+    - Updates NMVe packages
+    - Clones the microSD /boot and OS for compute nodes
+    - Installs and configures head node services
+    - Updates and installs compute node services
 ---
