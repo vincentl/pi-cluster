@@ -39,26 +39,63 @@ mount ${nvme}p2 /mnt
 mkdir -p /mnt/boot
 mount ${nvme}p1 /mnt/boot
 
-# Install debootstrap and install bookworm
+# Install debootstrap and install vanilla bookworm
 apt update
 apt install -y debootstrap systemd-container
 
 debootstrap --arch=arm64 bookworm /mnt http://deb.debian.org/debian/
 
 
+# Setup apt in container to use raspberry packages too
+cp /etc/apt/sources.list /mnt/etc/apt/sources.list
+cp /etc/apt/sources.list.d/raspi.list /mnt/etc/apt/sources.list.d/raspi.list
+cp /etc/apt/trusted.gpg /mnt/etc/apt/trusted.gpg
+cp /etc/apt/trusted.gpg.d/raspberrypi-archive-stable.gpg /mnt/etc/apt/trusted.gpg.d/raspberrypi-archive-stable.gpg
+
+# Get list of installed packages on microSD
+apt list --installed 2>/dev/null | grep '/' | cut -f1 -d '/' > /mnt/root/packages.list 
+
+# Install packages - human interaction for one package
+systemd-nspawn -D /mnt
+
+apt update
+for i in $(cat packages.list); do apt install -y $i 2>&1 | tee -a packages.log; done
+exit
+
+# Copy mounts, users, groups, wifi setup, etc from microSD to NVMe
+objects=(
+    /fstab
+    /default/
+    /passwd
+    /shadow
+    /group
+    /gshadow
+    /subgid
+    /subuid
+    /timezone
+    /apt/apt.conf.d/
+    /ssh/
+    /profile.d/
+    /init.d/
+    /hosts
+    /kernel-img.conf
+    /NetworkManager/system-connections/
+    /systemd/
+)
+for object in "${objects[@]}"; do
+    rsync -avzAX --delete /etc${object} /mnt/etc/${object}
+done
+
+# cmdline.txt
+rsync -avzAX /boot/firmware/cmdline.txt /mnt/boot/firmware/cmdline.txt
+
+
+
 # START HERE
 
-# 1. Figure out what we need to mirror from /etc for
-# 1a. apt to work with raspberry stuff
-# 1b. users, wifi, etc
-#
 # 2. Figure out how to script inside the container
-#
-# 3. Mounts
-#
-# 4. Correct cmdline.txt
 
-echo "/dev/nvme0n1p2 /      ext4    defaults,noatime  0 1" > /etc/fstab
+echo "/dev/nvme0n1p2 /      ext4    defaults,noatime  0 1" >> /etc/fstab
 echo "/dev/nvme0n1p1 /boot  vfat    defaults,noatime  0 2" >> /etc/fstab
 
 
