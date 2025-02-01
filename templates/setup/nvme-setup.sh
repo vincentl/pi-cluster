@@ -1,6 +1,7 @@
 #!/bin/bash
 
 apt update
+apt full-upgrade -y
 apt install -y partclone
 
 # PCIe External connector

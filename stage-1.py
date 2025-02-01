@@ -34,8 +34,8 @@ with open(option.toml, 'rb') as io:
 
 # SSH
 key_name = value(config, 'ssh.key-name')
-private_key_path = pathlib.PosixPath(f'~/.ssh/{key_name}').expanduser()
-public_key_path = pathlib.PosixPath(f'~/.ssh/{key_name}.pub').expanduser()
+private_key_path = pathlib.PosixPath(f'~/.ssh/{key_name}')
+public_key_path = pathlib.PosixPath(f'~/.ssh/{key_name}.pub')
 
 config['@'] = {'option': {'setup': option.setup}}
 config['@']['head-node'] = config['cluster']['node-prefix'] + config['cluster']['head-node-suffix']
@@ -44,7 +44,7 @@ config['@']['ssh']['config'] = str(pathlib.PosixPath(f'~/.ssh/config'))
 config['@']['ssh']['private-key'] = str(private_key_path)
 config['@']['ssh']['public-key'] = str(public_key_path)
 
-if not private_key_path.exists() or not public_key_path.exists():
+if not private_key_path.expanduser().exists() or not public_key_path.expanduser().exists():
     print(expand('msgs', 'ssh-key-missing.txt', config))
     sys.exit(1)
 
@@ -81,7 +81,7 @@ with open(fd, 'w') as io:
     io.write(expand('setup', 'hosts', config))
     io.write(template('10.0.0.1     {{@.head-node}}\n', config))
     for node in range(1, config['cluster']['node-count'] + 1):
-        io.write(template(f'10.0.1.{node}     ' + '{{cluster.cluster.node-prefix}}' + f'{node:03d}\n', config))
+        io.write(template(f'10.0.1.{node}     ' + '{{cluster.node-prefix}}' + f'{node:03d}\n', config))
 
 dst = pathlib.PosixPath(option.setup).joinpath('dhcpd.conf')
 fd = os.open(path=dst, flags=(os.O_WRONLY | os.O_CREAT | os.O_TRUNC), mode=0o644)

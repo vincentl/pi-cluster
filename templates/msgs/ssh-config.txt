@@ -1,8 +1,8 @@
 ---
 Create or edit {{@.ssh.config}} to include
 
-Host {{@.head-node}}
-    HostName {{@.head-node}}
-    IdentityFile {{@.ssh.private-key}}
+Host {{cluster.node-prefix}}*
     User {{cluster.user}}
+    IdentityFile {{@.ssh.private-key}}
+    ForwardAgent yes
 ---

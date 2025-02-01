@@ -5,4 +5,4 @@ node-count       = 32
 head-node-suffix = "login"
 
 [ssh]
-key-name   = "pi-cluster"
+key-name         = "pi-cluster"
