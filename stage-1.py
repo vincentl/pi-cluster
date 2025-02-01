@@ -50,7 +50,6 @@ if not private_key_path.exists() or not public_key_path.exists():
 for index, name in enumerate([
     'ssh-config.txt',
     'rpi-imager.txt',
-    'compute-node-mac.txt',
     'head-node-nvme-setup.txt',
     'network-boot.txt',
     ]):
@@ -85,8 +84,4 @@ with open(fd, 'w') as io:
 dst = pathlib.PosixPath(option.setup).joinpath('dhcpd.conf')
 fd = os.open(path=dst, flags=(os.O_WRONLY | os.O_CREAT | os.O_TRUNC), mode=0o644)
 with open(fd, 'w') as io:
-    io.write(expand('setup', 'dhcpd.conf.prefix', config))
-    for index, mac in enumerate(config["node"]["mac"]):
-        config['@']['node'] = {'index': str(index+1), 'padded-index': f'{index + 1:03d}', 'mac': mac}
-        io.write(expand('setup', 'dhcpd.conf.host', config))
-    io.write(expand('setup', 'dhcpd.conf.postfix', config))
+    io.write(expand('setup', 'dhcpd.conf', config))
