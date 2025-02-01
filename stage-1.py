@@ -38,6 +38,7 @@ private_key_path = pathlib.PosixPath(f'~/.ssh/{key_name}').expanduser()
 public_key_path = pathlib.PosixPath(f'~/.ssh/{key_name}.pub').expanduser()
 
 config['@'] = {'option': {'setup': option.setup}}
+config['@']['head-node'] = config['cluster']['node-prefix'] + config['cluster']['head-node-suffix']
 config['@']['ssh'] = {}
 config['@']['ssh']['config'] = str(pathlib.PosixPath(f'~/.ssh/config'))
 config['@']['ssh']['private-key'] = str(private_key_path)
@@ -50,6 +51,7 @@ if not private_key_path.exists() or not public_key_path.exists():
 for index, name in enumerate([
     'ssh-config.txt',
     'rpi-imager.txt',
+
     'head-node-nvme-setup.txt',
     'network-boot.txt',
     ]):
@@ -58,7 +60,7 @@ for index, name in enumerate([
 
 # Scripts
 os.makedirs(option.setup, exist_ok=True)
-for name in ['nvme-setup.sh', 'network-boot.sh']:
+for name in ['nvme-setup.sh', 'network-boot.sh', 'add-node.sh']:
     dst = pathlib.PosixPath(option.setup).joinpath(name)
     fd = os.open(path=dst, flags=(os.O_WRONLY | os.O_CREAT | os.O_TRUNC), mode=0o750)
     with open(fd, 'w') as io:
@@ -77,9 +79,14 @@ dst = pathlib.PosixPath(option.setup).joinpath('hosts')
 fd = os.open(path=dst, flags=(os.O_WRONLY | os.O_CREAT | os.O_TRUNC), mode=0o644)
 with open(fd, 'w') as io:
     io.write(expand('setup', 'hosts', config))
-    io.write(template('10.0.0.1     {{cluster.head-node}}\n', config))
+    io.write(template('10.0.0.1     {{@.head-node}}\n', config))
     for node in range(1, config['cluster']['node-count'] + 1):
-        io.write(template(f'10.0.1.{node}     ' + '{{node.prefix}}' + f'{node:03d}\n', config))
+        io.write(template(f'10.0.1.{node}     ' + '{{cluster.cluster.node-prefix}}' + f'{node:03d}\n', config))
+
+dst = pathlib.PosixPath(option.setup).joinpath('dhcpd.conf')
+fd = os.open(path=dst, flags=(os.O_WRONLY | os.O_CREAT | os.O_TRUNC), mode=0o644)
+with open(fd, 'w') as io:
+    io.write(expand('setup', 'dhcpd.conf', config))
 
 dst = pathlib.PosixPath(option.setup).joinpath('dhcpd.conf')
 fd = os.open(path=dst, flags=(os.O_WRONLY | os.O_CREAT | os.O_TRUNC), mode=0o644)

@@ -1,8 +1,10 @@
 #!/bin/bash
 
 # Check the OS is updated
+rm -rf /var/lib/apt/lists/*
 apt update
 apt full-upgrade -y
+apt install -y tcpdump
 
 # Deactivate wifi power management on head node to improve responsiveness over ssh
 if [ ! -f /etc/systemd/system/wlan0pwr.service ]; then
@@ -28,8 +30,8 @@ fi
 eth=$(ifconfig | grep -E "^eth" | cut -d: -f1)
 if [ ! -f /etc/network/interfaces.d/${eth} ]; then
     echo "Enabling wired ethernet"
-    apt-get autoremove --purge ifupdown
-    apt-get install ifupdown
+    apt autoremove --purge ifupdown
+    apt install -y ifupdown
 
     cat >> /etc/network/interfaces.d/${eth}<< EOF
 allow-hotplug ${eth}
@@ -43,9 +45,12 @@ EOF
     reboot
 fi
 
+# update hosts
+cp hosts /etc/hosts
+
 # turn on dhcpd
 if ! $(dpkg-query --status isc-dhcp-server 2>&1 | grep -q "Status: install ok installed"); then
-    apt-get install -y isc-dhcp-server
+    apt install -y isc-dhcp-server
     cp isc-dhcp-server /etc/default/
     cp dhcpd.conf /etc/dhcp/
     systemctl start isc-dhcp-server.service
@@ -53,25 +58,29 @@ fi
 
 # turn on tftp
 if ! $(dpkg-query --status tftpd-hpa 2>&1 | grep -q "Status: install ok installed"); then
-    apt-get install -y tftpd-hpa tftp-hpa
+    apt install -y tftpd-hpa tftp-hpa
     systemctl restart tftpd-hpa
 fi
 
 # Stage /boot
 if [ -z "$(ls -A /srv/tftp 2>/dev/null)" ]; then 
-    rsync -aAX /boot/ /srv/tftp
-    echo 'console=tty0 ip=dhcp root=/dev/nfs ro nfsroot=10.0.0.1:/image/pi5,vers=3,nolock panic=60 ipv6.disable=1 rootwait systemd.gpt_auto=no' > /srv/tftp/cmdline.txt
+    rsync -aAX /boot/ /srv/tftp/
+    echo 'console=tty0 ip=dhcp root=/dev/nfs ro nfsroot=10.0.0.1:/image/pi5,vers=3,nolock panic=60 ipv6.disable=1 rootwait systemd.gpt_auto=no cgroup_enable=memory cgroup_memory=1 swapaccount=1' > /srv/tftp/cmdline.txt
 fi
 
 # Configure compute node image
 if [ ! -d /image/pi5 || -z "$(ls -A /image/pi5 2>/dev/null)" ]; then
     mkdir -p /image/pi5
-    apt-get install -y systemd-container debootstrap
-    debootstrap \
-        --include=dbus,libpam-systemd,initramfs-tools-core,nfs-common,openssh-server,openssh-client \
-        $(grep VERSION_CODENAME /etc/os-release | sed s/.*=//) \
-        /image/pi5
-    rsync --existing --archive --acls --xattrs /etc/ /image/pi5/etc
+    read -rp "Insert microSD card and press Enter to continue..."
+    mkdir -p /mnt/microsd
+    mount /dev/mmcblk0p2 /mnt/microsd
+    mount /dev/mmcblk0p1 /mnt/microsd/boot
+
+    rsync -aAXv /mnt/microsd/boot/ /image/pi5/boot/
+    rsync -aAXv /mnt/microsd/ /image/pi5/
+
+    umount /mnt/microsd/boot
+    umount /mnt/microsd
 
     # Turnoff a few kernel modules not needed on a compute node
     sed -i 's/MODULES=.*/MODULES=netboot/' /image/pi5/etc/initramfs-tools/initramfs.conf
@@ -100,6 +109,15 @@ EOF
     rm /image/pi5/etc/systemd/system/multi-user.target.wants/rpcbind.service
     rm /image/pi5/etc/systemd/system/sockets.target.wants/rpcbind.socket
     rm /image/pi5/etc/hostname
+
+    # Compute Node fstab
+    cat >/image/pi5/etc/fstab<< EOF
+proc                     /proc           proc     defaults     0  0
+10.0.0.1:/image/pi5      /               nfs      defaults,ro  0  0
+10.0.0.1:/home           /home           nfs      defaults,rw  0  0
+cgroup                   /sys/fs/cgroup  cgroup2  defaults     0  0
+EOF
+
 fi
 
 # head node nfs

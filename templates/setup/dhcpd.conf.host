@@ -1,6 +1,0 @@
-    host {{node.prefix}}{{@.node.padded-index}} {
-      hardware ethernet {{@.node.mac}};
-      fixed-address 10.0.1.{{@.node.index}};
-      option host-name "{{node.prefix}}{{@.node.padded-index}}";
-      option root-path "10.0.0.1:/image/pi5,v3,tcp,hard,rsize=8192,wsize=8192";
-    }

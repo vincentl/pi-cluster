@@ -26,13 +26,44 @@ less instructions.txt
 ## working on network-boot.sh endgame
 
 ```bash
-# set root password
+# repeat instructions - with scripts - any human interaction?
+
+# delete extra stuff below
+
+# debootstrap again is painful, could be do something after first debootstrap to make /image/pi5
+
+# what is going on with /boot vs /boot/firmware and tftp
+# Problem - need serial number link in /srv/tftp to firmware
+# is that from TCP dump too?
+# Problem cmdline.txt in wrong place needs to be in firmware
+
+
+# use add-host for 2 nodes
+
+# figure out how to add a package with systemd-nspawn
+# Problem - # /home /image/pi5/home none defaults,bind,nofail,x-systemd.device-timeout=2 0 0 in image fstab for nspawn but not network boot
+
+# install slurm & mpi
+
+
+
+
+
+# configure compute node
+systemd-nspawn --boot --directory /image/pi5 --bind=/srv/tftp:/boot
+
+
+
+
+
+
+
+
+# set root password - no longer needed
 systemd-nspawn --directory /image/pi5
 passwd
 logout
 
-# configure compute node
-systemd-nspawn --boot --directory /image/pi5 --bind=/srv/tftp:/boot
 
 
 
@@ -78,11 +109,6 @@ EOF
 # Setup ramdisk on compute nodes
 echo ASYNCMOUNTNFS=no >> /etc/default/rcS
 echo RAMTMP=yes >> /etc/default/tmpfs
-
-
-
-
-
 
 ##### INSIDE
 echo "BOOT=nfs" >> /etc/ap-tools/initramfs.conf

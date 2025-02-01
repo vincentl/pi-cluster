@@ -1,15 +1,8 @@
 [cluster]
-user       = "pi"
-head-node  = "pi-login"
-node-count = 32
-
+user             = "pi"
+node-prefix      = "pi-"
+node-count       = 32
+head-node-suffix = "login"
 
 [ssh]
 key-name   = "pi-cluster"
-
-[node]
-prefix = "pi-"
-mac = [
-  "2c:cf:67:c6:7d:83",
-  "2c:cf:67:c6:7d:52",
-]
