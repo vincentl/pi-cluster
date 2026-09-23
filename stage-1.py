@@ -51,9 +51,9 @@ if not private_key_path.expanduser().exists() or not public_key_path.expanduser(
 for index, name in enumerate([
     'ssh-config.txt',
     'rpi-imager.txt',
-
     'head-node-nvme-setup.txt',
     'network-boot.txt',
+    'add-node.txt'
     ]):
     print(f'Step {index+1}')
     print(expand('msgs', name, config))

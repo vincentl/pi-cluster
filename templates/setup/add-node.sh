@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Ensure the script is run with exactly one argument
-if [[ $# -ne 1 || ! $1 =~ ^0*[0-9]+$ ]]; then
-    echo "Usage: $0 <integer (with or without leading zeros)>"
+if [[ $# -ne 1 || ! $1 =~ ^[1-9][0-9]*$ ]]; then
+    echo "Usage: $0 <integer>"
     exit 1
 fi
 
 # Convert argument to integer (removes leading zeros)
-HOST=$1
-HOST_ID=$((10#$HOST))
+HOST_ID=$1
+HOST=$(printf "%03d" "$1")
 
 # Define network interface (modify as needed)
 INTERFACE="eth0"
@@ -50,4 +50,8 @@ sudo systemctl restart isc-dhcp-server
 
 echo "DHCP service restarted. The device should now receive $IP_PREFIX.$IP_SUFFIX"
 
-# Now wait for a packet with the serial number & create a link in 
+# Now wait for a packet with the serial number & create a link in /srv/tftp/
+# Packet 13:46:31.804271 IP pi-001.29037 > pi-login.tftp: TFTP, length 49, RRQ "8baee41e/config.txt" octet tsize 0 blksize 1468
+# Become symbolic link 8baee41e -> firmware in /srv/tftp
+serial=$(tcpdump -l -i eth0 -nne udp port 69 2>/dev/null | grep --line-buffered "RRQ" | sed -un 's/.*RRQ "\([^\/]*\)\/.*/\1/p' | head -n 1)
+ln -s firmware /srv/tftp/${serial}

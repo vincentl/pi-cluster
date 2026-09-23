@@ -14,6 +14,10 @@ if ! grep -q "dtparam=nvme" $path; then
     reboot
 fi
 
+# Configuration changes on microSD that will propagate to NVMe and Network Boot
+sed -i 's/^.*AllowAgentForwarding.*$/AllowAgentForwarding yes/' /etc/ssh/sshd_config
+rsync -aAX hosts /etc/hosts
+
 # Format NVMe & Install OS
 # get NVMe device + confirmation
 microsd=/dev/$(basename $(df | grep /boot/firmware | cut -d' ' -f 1) p1)

@@ -13,4 +13,5 @@ Network Boot Setup
     - Clones the microSD /boot and OS for compute nodes
     - Installs and configures head node services
     - Updates and installs compute node services
+  - Remove the microSD card
 ---

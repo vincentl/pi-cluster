@@ -2,7 +2,7 @@
 Head Node NVMe Setup
 
   - Move the microSD card to the head node and boot
-  - Stage NVMe setup script with `scp {{@.option.setup}}/nvme-setup.sh {{cluster.user}}@{{@.head-node}}:`
+  - Stage NVMe setup script & hosts file with `scp {{@.option.setup}}/{nvme-setup.sh,hosts} {{cluster.user}}@{{@.head-node}}:`
   - Connect to the head node with `ssh {{cluster.user}}@{{@.head-node}}`
   - Execute the script with `sudo ./nvme-setup.sh`
     - Enables the NVMe device if required

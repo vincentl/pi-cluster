@@ -1,0 +1,10 @@
+---
+Add Nodes
+
+  - For each compute node, tftp and DHCP needs an update
+  - `add-node.sh` will apply the updates when a new node is added to the router
+  - Node names 
+  - For node number 1:
+    - on the head node, `sudo ./add-node.sh 1`
+    - plug in compute node
+---
