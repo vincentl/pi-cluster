@@ -31,12 +31,13 @@ settings file, `cluster.env`. Every script can be run again safely: finished ste
 
 ```
 pi-cluster/
-├── cluster.env          your settings: user, hostnames, node count, addresses
+├── cluster.env          your settings: user, hostnames, addresses, OS image
 ├── head/
 │   ├── 10-nvme.sh       copy the head node from microSD to NVMe
 │   ├── 20-netboot.sh    turn the head node into a network boot server
 │   ├── 30-add-node.sh   register one compute node
-│   └── image-run.sh     run a command inside the compute node image
+│   ├── image-run.sh     run a command inside the compute node image
+│   └── lib.sh           shared by the scripts above
 ├── docs/                figures and the hardware test checklist
 └── notes/               working notes not yet turned into scripts
 ```
@@ -97,20 +98,23 @@ On the workstation:
 
 ## 1. Flash the head node card
 
-Write the microSD card with [Raspberry Pi Imager](https://www.raspberrypi.com/software/):
+Write the microSD card with [Raspberry Pi Imager](https://www.raspberrypi.com/software/). Its
+screens, in order:
 
-| Setting          | Value                                                                  |
-|------------------|------------------------------------------------------------------------|
-| Device           | Raspberry Pi 5                                                         |
-| Operating system | Raspberry Pi OS Lite (64-bit)                                          |
-| Hostname         | `pi-login`, the `HEAD_NODE` in `cluster.env`                           |
-| Username         | `pi`, the `CLUSTER_USER` in `cluster.env`, with a password             |
-| Wireless LAN     | Your wifi. This is the head node's link to the internet                |
-| Locale           | Your time zone and keyboard layout                                     |
-| SSH              | Enabled, public-key authentication only, with the contents of `~/.ssh/pi-cluster.pub` |
+| Screen               | Choose                                                                       |
+|----------------------|------------------------------------------------------------------------------|
+| Device               | Raspberry Pi 5                                                               |
+| OS                   | Raspberry Pi OS (other) → Raspberry Pi OS Lite (64-bit)                      |
+| Storage              | The microSD card                                                             |
+| Hostname             | `pi-login`, the `HEAD_NODE` in `cluster.env`                                 |
+| Localisation         | Your capital city, time zone and keyboard layout                             |
+| User                 | `pi`, the `CLUSTER_USER` in `cluster.env`, and a password                    |
+| Wi-Fi                | Your wifi network and its password. This is the head node's link to the internet |
+| Remote access        | Enable SSH, use public key authentication, and add the contents of `~/.ssh/pi-cluster.pub` |
+| Raspberry Pi Connect | Leave it off                                                                 |
 
-![Figure 4: Imager general settings](docs/images/04-imager-general.png)
-![Figure 5: Imager SSH settings](docs/images/05-imager-ssh.png)
+![Figure 4: Imager User screen](docs/images/04-imager-user.png)
+![Figure 5: Imager Remote access screen](docs/images/05-imager-remote-access.png)
 
 Put the card in the head node and connect it to the switch, which powers it. After a minute
 or two:
@@ -125,8 +129,10 @@ router and use it as `HostName` in the ssh config.
 ## 2. Move the head node to NVMe
 
 Copy the repository to the head node and run the first script. It enables the NVMe slot
-(if that needs a reboot, it reboots and asks you to run it again), copies the running system
-to the NVMe drive, and grows the root partition to fill it.
+(if that needs a reboot, it reboots and asks you to run it again), tells the bootloader to
+look for the NVMe drive, copies the running system to the drive, and grows the root partition
+to fill it. It asks before it erases the drive, and `sudo` asks for the password you gave
+Imager.
 
 ```bash
 # workstation, from the directory that contains pi-cluster
@@ -136,7 +142,7 @@ ssh pi-login
 
 ```bash
 # pi-login
-sudo pi-cluster/head/10-nvme.sh
+sudo bash pi-cluster/head/10-nvme.sh
 sudo shutdown now
 ```
 
@@ -157,24 +163,27 @@ downloading and unpacking the operating system image. It
 
 - configures `eth0` as 10.0.0.1, without a reboot,
 - installs and configures DHCP, TFTP, NFS and a time server,
-- downloads the current Raspberry Pi OS Lite image and unpacks it to `/image/pi5`,
+- downloads the current Raspberry Pi OS Lite image, checks it and unpacks it to `/image/pi5`,
 - turns that copy into a network-boot image: NFS root, RAM for `/tmp` and `/var`, your user
   account, ssh host keys, no wifi,
-- serves the image's `/boot` over TFTP and exports `/image/pi5`, `/home` and `/opt` over NFS.
+- serves the image's `/boot` over TFTP and exports `/image/pi5`, `/home` and `/opt` over NFS,
+- turns off cloud-init on the head node. Imager uses it to apply your settings on the first
+  boot; after that it would rewrite `/etc/hosts` at every boot and drop the node names.
 
 ```bash
 # pi-login
-sudo pi-cluster/head/20-netboot.sh
+sudo bash pi-cluster/head/20-netboot.sh
 ```
 
 When it finishes, `showmount -e` lists the three exports.
 
 ## 4. Add compute nodes
 
-Out of the box, a Pi 5 does not try to boot from the network. Once per node, use Imager to
-write **Misc Utility Images → Bootloader → Network Boot** to the microSD card, put it in the
-node, connect the node to the switch until the green LED blinks steadily, then unplug the node
-and remove the card.
+Out of the box, a Pi 5 tries the microSD card, NVMe and USB, but not the network. A bootloader
+card changes that, once per node. Write it with Imager: Device **Raspberry Pi 5**, then
+**Misc utility images → Bootloader (Pi 5 family) → Network Boot**, then the microSD card. For
+each node, put the card in and connect the node to the switch. When the green LED flashes
+rapidly without stopping (a connected screen turns green), unplug the node and remove the card.
 
 ![Figure 6: Imager bootloader image](docs/images/06-imager-bootloader.png)
 
@@ -182,7 +191,7 @@ Then, for node 1:
 
 ```bash
 # pi-login
-sudo pi-cluster/head/30-add-node.sh 1
+sudo bash pi-cluster/head/30-add-node.sh 1
 ```
 
 Connect the node to the switch. The script sees the node ask for an address and records
@@ -190,6 +199,7 @@ its hardware address and name, then sees its first boot request and records its 
 About a minute later the node is up:
 
 ```bash
+# workstation
 ssh pi-001 uptime
 ```
 
@@ -198,9 +208,9 @@ Repeat with 2, 3, … for the other nodes. Node N is `pi-NNN` at 10.0.1.N.
 ## 5. Check the cluster
 
 ```bash
-# pi-login
-systemctl is-active dnsmasq nfs-server chrony
-ssh pi-001 'findmnt -n -o TARGET,SOURCE,OPTIONS -t nfs; timedatectl show -p NTPSynchronized'
+# workstation
+ssh pi-login systemctl is-active dnsmasq nfs-server chrony
+ssh pi-001 'findmnt -n -o TARGET,SOURCE,OPTIONS -t nfs,nfs4; timedatectl show -p NTPSynchronized'
 ```
 
 Three lines of `active`; the node's `/` from `10.0.0.1:/image/pi5` read-only, `/home`
@@ -211,9 +221,9 @@ read-write, `/opt` read-only; and `NTPSynchronized=yes`.
 | Task                             | How                                                                    |
 |----------------------------------|------------------------------------------------------------------------|
 | Update the scripts               | `scp -r pi-cluster pi-login:` again, or `git pull` if you cloned on the head node |
-| Update the compute image         | `sudo pi-cluster/head/image-run.sh apt full-upgrade -y`, then reboot the nodes |
-| Open a shell in the compute image | `sudo pi-cluster/head/image-run.sh`                                   |
-| Rebuild the compute image        | `sudo rm -rf /image/pi5`, then run `20-netboot.sh` again               |
+| Update the compute image         | `sudo bash pi-cluster/head/image-run.sh apt update`, the same with `apt full-upgrade -y`, then reboot the nodes |
+| Open a shell in the compute image | `sudo bash pi-cluster/head/image-run.sh`                              |
+| Rebuild the compute image        | `sudo rm -rf /image/pi5`, then run `20-netboot.sh` again. Registered nodes keep booting |
 | Re-run any script                | Always safe. Finished steps are skipped                                |
 
 Power the compute nodes off before changing the image they run from.
@@ -222,10 +232,14 @@ Power the compute nodes off before changing the image they run from.
 
 - **`ssh pi-login` cannot find the host.** `pi-login.local` is not resolving; use the address
   from your router as `HostName`.
+- **`20-netboot.sh` says your wifi network already uses an address.** Your home network uses
+  the cluster's addresses. Choose other `CLUSTER_NET`, `HEAD_IP` and `NODE_SUBNET` values in
+  `cluster.env` and run the script again.
 - **`30-add-node.sh` never sees the node.** Its bootloader is not set to network boot; repeat
   the Imager bootloader step. `journalctl -u dnsmasq -f` shows requests as they arrive.
 - **The node gets an address but does not boot.** The same log shows what it asks for over
-  TFTP. The serial-number link must exist in `/image/pi5/boot/`.
+  TFTP. The serial-number link must exist in `/image/pi5/boot/`; the node's line in
+  `/etc/pi-cluster/nodes` records its serial number.
 - **The node boots without `/home`.** `exportfs -v` on the head node must list `/home` for
   10.0.1.0/24.
 
@@ -237,8 +251,8 @@ Not yet scripted. The working procedure is in [notes/slurm-mpi-shmem.md](notes/s
 
 - **No microSD at all** is possible: a Pi 5 with no boot media can fetch Imager over the
   network and write the NVMe directly. That needs a monitor and keyboard, so this guide uses a card.
-- **Security** assumes a private LAN. `/home` is exported without root squashing, and the head
-  node's user has passwordless sudo, as Imager sets it up.
+- **Security** assumes a private LAN. `/home` is exported without root squashing, so root on
+  any node can read and change every user's files.
 
 ## References
 

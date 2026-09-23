@@ -95,6 +95,10 @@ on the head node instead of `scp`, and a public home for the Readme.
 Default: local only; `make check` covers the same checks.
 Answer: public GitHub repo, 2026-09-22. Opus creates it in Phase 0 after Vincent confirms the
 name and license (D19), and adds a `make check` workflow in Phase 2. Deploy path per D20.
+Update 2026-09-22, Phase 0: asked to create and push, Vincent said "not yet". The repo stays
+local; ask again later, before the Phase 2 workflow at the latest. Still open at that point:
+the eight commits carry his gmail address as author; a noreply rewrite is only possible before
+the first push.
 
 ## D12. Figures
 
@@ -151,3 +155,12 @@ Readme's Maintenance table already mentions `git pull` for that case.
 ## D21. Repo name
 
 Decided 2026-09-22: `pi-cluster`, public, on Vincent's GitHub account.
+
+## D22. Phase 1 plan
+
+Decided 2026-09-22: Vincent approved `ai/plans/phase-1-head-scripts.md` as written, including
+its changes C1–C20 to the kickoff prompt. The ones that are choices rather than facts:
+cloud-init turned off on the head node so `/etc/hosts` keeps the node names (C2); the node
+registry at `/etc/pi-cluster/nodes` (C1); no default route for compute nodes (C6); `PCIE_PROBE=1`
+set by 10-nvme.sh (C16); rpi-swap zram only on the nodes (C17); Readme §5 run from the
+workstation (C19). D16 is settled: dnsmasq follows the per-serial symlinks, so no bind mount.

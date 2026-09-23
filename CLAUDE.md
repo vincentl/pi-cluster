@@ -25,8 +25,6 @@ change the Readme in the same commit and say so.
 - `docs/`: `images/` with its figure list, `testing.md` hardware checklist (planned: Phase 2).
 - `.github/workflows/`: `make check` on push (planned: Phase 2). Remote is public GitHub.
 - `ai/`: prompts, audits, decisions, plans and test logs for Claude sessions. Start at `ai/README.md`.
-- Being retired in Phase 1: `stage-1.py`, `utils.py`, `templates/`, `cluster.toml`, `manage.sh`,
-  `setup/`, `instructions.txt`. Port their logic, then delete them.
 
 ## Conventions
 
@@ -57,6 +55,5 @@ a human following `docs/testing.md`; results go in `ai/test-logs/`.
 - Don't ssh into the cluster unless `ai/decisions.md` D9 says it is allowed.
 - Don't assert Raspberry Pi bootloader, Imager, or Debian trixie behaviour from memory.
   Fetch the doc or package page and cite it in the plan file.
-- Don't commit `setup/`, `instructions.txt`, `__pycache__/`, downloaded images, or anything
-  from `~/.ssh`.
+- Don't commit downloaded images or anything from `~/.ssh`.
 - Don't push without Vincent's OK, and never force-push.

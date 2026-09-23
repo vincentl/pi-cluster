@@ -1,7 +1,3 @@
-setup/
-instructions.txt
-__pycache__/
-*.pyc
 .DS_Store
 *.img
 *.img.xz

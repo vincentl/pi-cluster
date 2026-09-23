@@ -1,8 +1,0 @@
-[cluster]
-user             = "pi"
-node-prefix      = "pi-"
-node-count       = 32
-head-node-suffix = "login"
-
-[ssh]
-key-name         = "pi-cluster"

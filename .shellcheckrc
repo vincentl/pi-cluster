@@ -1,0 +1,3 @@
+# shellcheck: find lib.sh and cluster.env relative to the script being checked
+source-path=SCRIPTDIR
+external-sources=true

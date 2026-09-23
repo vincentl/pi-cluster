@@ -1,8 +1,0 @@
----
-ERROR: At least on ssh key is missing
-  SSH Private Key: `{{@.ssh.private-key}}`
-  SSH Public Key : `{{@.ssh.public-key}}`
-
-Run `ssh-keygen -f ~/.ssh/{{ssh.key-name}}` with additional arguments to set
-desired security level and key type and then run this script again.
----
