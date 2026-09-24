@@ -99,11 +99,20 @@ Update 2026-09-22, Phase 0: asked to create and push, Vincent said "not yet". Th
 local; ask again later, before the Phase 2 workflow at the latest. Still open at that point:
 the eight commits carry his gmail address as author; a noreply rewrite is only possible before
 the first push.
+Update 2026-09-23, Phase 2: Vincent: "vincent.lucarelli@gmail.com is fine". The history keeps
+it; no rewrite. The same day he chose D29 (a): this repo pushes to the private
+`vincentl/pi-cluster-dev`, and the public `vincentl/pi-cluster` comes later with only the public
+files.
 
 ## D12. Figures
 
 Decided 2026-09-22: `docs/images/NN-name.ext` placeholders in the Readme, shot list in
 `docs/images/README.md`. Vincent captures photos and screenshots; the session draws figure 1.
+Update 2026-09-23, Vincent: both diagrams are Mermaid in the Readme, which GitHub renders (the
+cluster overview, which replaces the planned SVG, and a new one of how a compute node boots).
+Six photos from the 2025 build are used; Imager's User and bootloader screenshots are dropped;
+Imager's Remote access screenshot stays. The files were renumbered, since none had been
+committed; the list is in `docs/images/README.md`.
 
 ## D13. Settings file
 
@@ -164,3 +173,75 @@ cloud-init turned off on the head node so `/etc/hosts` keeps the node names (C2)
 registry at `/etc/pi-cluster/nodes` (C1); no default route for compute nodes (C6); `PCIE_PROBE=1`
 set by 10-nvme.sh (C16); rpi-swap zram only on the nodes (C17); Readme §5 run from the
 workstation (C19). D16 is settled: dnsmasq follows the per-serial symlinks, so no bind mount.
+
+## D23. Agent forwarding to the head node
+
+Decided 2026-09-22: the Readme's ssh config sets `ForwardAgent yes` for `Host pi-login` only, so
+`ssh pi-001` works from the head node while the key is in the workstation's agent, and
+`AddKeysToAgent yes` for `Host pi-*`, so the key is in the agent after the first connection. Compute
+nodes are still reached with ProxyJump, which needs no forwarding. A key made on the head node,
+for jobs that ssh between nodes, is left for Phase 3.
+
+## D24. EEPROM write in 10-nvme.sh
+
+Decided 2026-09-22, during the Phase 2 hardware test: 10-nvme.sh sets `PCIE_PROBE=1` only when
+the PCIe slot had to be enabled in `config.txt`, meaning the adapter is not HAT+. The X1012 is
+detected as HAT+ (test log 2.1), and the old setup booted from NVMe without `PCIE_PROBE`, so on
+this hardware the EEPROM is left alone. This changes C16 of the Phase 1 plan.
+
+## D25. How 10-nvme.sh copies the card
+
+Decided 2026-09-22, during the Phase 2 hardware test: 10-nvme.sh makes fresh file systems on the
+NVMe drive and copies the running system with rsync. This replaces partclone's block copy of the
+mounted root, which partclone refuses without `-F` and which needed e2fsck repairs afterwards.
+Vincent chose this over writing the SSD with Imager through a USB adapter, a part he would use
+only once. `--force` copies again when the drive already holds a finished copy of the same
+system.
+
+## D26. Replacing a node's board
+
+Added 2026-09-23, after Vincent asked how to swap the board behind a node number:
+`30-add-node.sh N --replace` forgets the registered board (registry line, serial link, DHCP
+lease) and registers the new one under the same number and address. It is documented in the
+Readme's Maintenance table and in checklist item 4.8.
+
+## D27. NFS client helpers in the image
+
+Decided 2026-09-23, during the Phase 2 hardware test: 20-netboot.sh masks nfs-common's
+`rpc-statd-notify` and `nfs-blkmap` in the image. Each logged an error at every node boot (test
+log, 5.8). sm-notify tells NFS servers that this client restarted, so they drop its NFSv3 locks;
+the nodes hold none (the root is mounted `nolock`, `/home` and `/opt` are NFSv4.2), and its list
+lives in `/var/lib/nfs`, which is empty RAM on a node. blkmapd serves pNFS block layouts, which
+the head node's exports do not offer. The other lines in the same check, two udev warnings from a
+typo in the stock alsa-utils rule, are left alone and listed as expected in `docs/testing.md`.
+The Phase 1 plan (F22) expected the sm-notify failure and relied on systemd ignoring it; the mask
+also keeps it out of the error log. Sources: Phase 1 plan, stage 4i. Verified on nodes 1-3 the
+same day: both units `masked`, and 5.8 shows only the alsa lines.
+
+## D28. Which nodes image-run.sh reports as running
+
+Decided 2026-09-23, before item M.2: `image-run.sh` still finds nodes by their established NFS
+connections (C15), and now names only the addresses that also answer one ping. After a node is
+unplugged, the head node's NFS server keeps its connection until two 6-minute idle sweeps have
+passed, so the old check warned about unplugged nodes for up to 12 minutes, exactly when the
+Readme says to power them off. Sources: Phase 1 plan, `head/image-run.sh`.
+
+## D29. What is published, and how
+
+Raised 2026-09-23 by Vincent: `docs/testing.md`, `notes/` and `ai/` are for us, not readers.
+Public: `Readme.md`, `LICENSE`, `cluster.env`, `head/`, the figures in `docs/images/`,
+`Makefile`, `.shellcheckrc`, `.github/`, `.gitignore`. Private: `ai/`, `notes/`,
+`docs/testing.md`, `CLAUDE.md`, `docs/images/README.md`. The public files no longer link to
+private ones (Readme Status line, file tree, section 5, Slurm section; the Makefile comment).
+The history already holds `ai/`, `notes/` and `CLAUDE.md` (from `2e628cb`), so pushing this
+repo as it is would publish them. Options:
+(a) keep this repo private with its full history (a private GitHub repo gives a backup and
+runs CI), and create the public `vincentl/pi-cluster` fresh from the public files, copying
+them over at each release;
+(b) one public repo: rewrite the history to drop the private paths before the first push, and
+keep the private files in a separate private repo beside it.
+Default: (a), with the first public release after Phase 3 (Slurm), since the Readme's first
+line promises a Slurm cluster.
+Answer: (a), 2026-09-23. This repo's remote is the private
+`git@github.com:vincentl/pi-cluster-dev.git`, which Vincent created. The public repo comes when
+the whole setup is nearly complete, after Phase 3; there is no hurry.

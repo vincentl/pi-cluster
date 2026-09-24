@@ -1,7 +1,7 @@
 # Phase 1 plan: `head/` scripts
 
-Status: approved by Vincent on 2026-09-22 (D22) and implemented the same day; not
-hardware-tested. Kickoff: `ai/prompts/2026-09-22-trixie-refresh.md`. Facts are rows F1–F39 at
+Status: approved by Vincent on 2026-09-22 (D22) and implemented the same day; hardware-tested
+in Phase 2, with the fixes it found (`ai/test-logs/2026-09-22.md`, `ai/plans/phase-2-test-reconcile.md`). Kickoff: `ai/prompts/2026-09-22-trixie-refresh.md`. Facts are rows F1–F39 at
 the end; every row was fetched on 2026-09-22 from the source given, nothing from memory.
 
 ## What the research changed
@@ -60,8 +60,8 @@ the workstation saves the one `ssh pi-login` step but makes every later command 
 | C12 | More image units: cloud-init off; `userconfig` masked and `getty@tty1` re-enabled; `regenerate_ssh_host_keys`, `rpi-resize`, `rpi-eeprom-update`, `apt-daily`, `apt-daily-upgrade`, `dpkg-db-backup` and `man-db` timers masked; `ssh` enabled. Masked rather than disabled so an upgrade in the image cannot bring them back. | F25, F29, F22. `rpi-eeprom-update` would otherwise flash every node from the shared image. |
 | C13 | `/usr/sbin/policy-rc.d` (exit 101) in the image. | Without it, `apt` inside nspawn starts packaged daemons on the head node's network (F30), and a clash on port 22 or 111 fails the upgrade. |
 | C14 | `image-run.sh` uses `--resolv-conf=bind-host`, not `replace-host`, and empties the machine ID after every command. | `replace-host` writes the head's home-network resolver into the image for good (F30, F31). Package scripts fill `/etc/machine-id` inside nspawn (F24). |
-| C15 | "Warn if any node holds an NFS lease" is implemented as: established TCP connections to port 2049 (`ss`). | NFS has no leases; DHCP leases are useless here because `ip=dhcp` never renews. |
-| C16 | 10-nvme.sh: new `PCIE_PROBE=1` stage; the boot partition is sized from the card instead of a fixed 512 MiB; a finished clone is detected from the NVMe's own `fstab`. | F7, F9; C16 guard is a real-state check, so a rerun before shutdown does not re-clone. |
+| C15 | "Warn if any node holds an NFS lease" is implemented as: established TCP connections to port 2049 (`ss`). | NFS has no leases; DHCP leases are useless here because `ip=dhcp` never renews. Phase 2 added a ping check, because an unplugged node's connection outlives it (D28). |
+| C16 | 10-nvme.sh: new `PCIE_PROBE=1` stage; the boot partition is sized from the card instead of a fixed 512 MiB; a finished clone is detected from the NVMe's own `fstab`. Phase 2 narrowed the EEPROM stage to adapters that are not HAT+ (D24) and added a machine-ID check to the clone guard. | F7, F9; C16 guard is a real-state check, so a rerun before shutdown does not re-clone. |
 | C17 | Image drop-ins: timesyncd `NTP=HEAD_IP`, NetworkManager `unmanaged-devices=interface-name:eth0`, rpi-swap `Mechanism=zram`, sshd `PasswordAuthentication no`, empty `resolv.conf`. | F35, F37 (both spec conditions hold), F28 (default swap file lands on tmpfs `/var`), matches the head's Imager SSH setting, F31. |
 | C18 | 20-netboot.sh stops with a clear message if the wifi network already contains `HEAD_IP` (for example a 10.0.0.0/24 home router). | Otherwise eth0 and wlan0 fight over the same addresses. Check only, no layout change. |
 | C19 | Readme §5 runs from the workstation. | The head node has no private key, so `ssh pi-001` from pi-login fails; the workstation reaches nodes through ProxyJump. |
@@ -86,22 +86,28 @@ Sourced by every script. `set -euo pipefail`; `REPO` from `$0`; sources `cluster
 
 ## `head/10-nvme.sh`
 
-Runs from the microSD. Ports `templates/setup/nvme-setup.sh`.
+Runs from the microSD. Ports `templates/setup/nvme-setup.sh`. Revised during the Phase 2
+hardware test: the partclone block copy became an rsync file copy (D25), the EEPROM stage runs
+only for adapters that are not HAT+ (D24), and `--force` was added. The table shows the revised
+script.
 
 | # | Stage | Guard (real state) | Ports |
 |---|-------|--------------------|-------|
 | 0 | Exit 0 with a message if `/` is on NVMe | `findmnt -n -o SOURCE /` is `/dev/nvme*` | new |
 | 1 | Find the card (`lsblk -no PKNAME` of `/`, must be `mmcblk*`) and the NVMe disk (`lsblk -dn -o NAME,TRAN`, TRAN=nvme) | detection only | replaces :23-24 |
 | 2 | No NVMe disk: append `[all]` + `dtparam=nvme` to `/boot/firmware/config.txt`, say "run this again after the reboot", reboot. Already there and still no disk: stop with a hardware message | disk present; line present | :7-15 |
-| 3 | Install `partclone` | `dpkg-query` status | :3-5, without the full-upgrade |
-| 4 | EEPROM `PCIE_PROBE=1` via `rpi-eeprom-config --apply` | `rpi-eeprom-config` shows `PCIE_PROBE=1` | new (F7, F9) |
-| 5 | Clone already finished: skip to 10 | NVMe p2 mounts read-only and its `etc/fstab` names NVMe p2's PARTUUID | new |
-| 6 | Confirm, showing the NVMe model, size and current partitions | none; this is the confirmation | :26-32 |
-| 7 | GPT: p1 as large as the card's boot partition, ESP flag; p2 the rest | after confirm | :34-38 |
-| 8 | Unmount `/boot/firmware`; `partclone.vfat` p1; `partclone.ext4 -F` p2; remount | after confirm | :40-43 |
-| 9 | `parted resizepart 2 100%`; `fsck.vfat -a`; `e2fsck -fy` (exit codes below 4 are repairs, not failures); `resize2fs` | after clone | :45-49 |
-| 10 | NVMe `fstab` and `cmdline.txt` to NVMe PARTUUIDs (the last write, so it is the completion mark for stage 5) | same check as 5 | :51-58 |
-| 11 | Print the next two Readme commands (`sudo shutdown now`; from the workstation `ssh pi-login findmnt -n -o SOURCE /`) | none | new |
+| 3 | EEPROM `PCIE_PROBE=1` via `rpi-eeprom-config --apply`, only when `config.txt` has a `dtparam=nvme`/`pciex1` line, that is, when the adapter is not HAT+ | `rpi-eeprom-config` shows `PCIE_PROBE=1` | new (F7, F9) |
+| 4 | Copy already finished: skip to 8, unless `--force` | NVMe p2 mounts read-only, has the running system's `/etc/machine-id`, and its `etc/fstab` names NVMe p2's PARTUUID. The machine-ID check was added in Phase 2: an older install made the same way passed the fstab check alone | new |
+| 5 | Confirm, showing the NVMe model, size and current partitions | none; this is the confirmation | :26-32 |
+| 6 | GPT: p1 as large as the card's boot partition, ESP flag, `mkfs.vfat -F 32 -n bootfs`; p2 the rest, `mkfs.ext4 -L rootfs` | after confirm | :34-38 |
+| 7 | `rsync -aHAXx --numeric-ids --exclude=/var/swap / ` onto p2 (exit 24, files that vanished mid-copy, is fine); `rsync -rt` `/boot/firmware` onto p1; NVMe `fstab` and `cmdline.txt` to NVMe PARTUUIDs, the last write and the completion mark for stage 4 | after confirm | :40-58, without the resize and fsck: fresh file systems already fill the drive |
+| 8 | Print the next two Readme commands (`sudo shutdown now`; from the workstation `ssh pi-login findmnt -n -o SOURCE /`) | none | new |
+
+Facts for the revision: `rsync -x` still creates an empty directory at each mount point it
+skips, so `/boot/firmware` exists on the copy for the second rsync; exit status 24 is "Partial
+transfer due to vanished source files" (https://manpages.debian.org/trixie/rsync/rsync.1.en.html).
+`parted`, `dosfstools`, `e2fsprogs` and `rsync` are in the Lite image (F2), so 10-nvme.sh
+installs nothing. `/var/swap` is rpi-swap's file, which it recreates at boot (F28).
 
 Dropped: `AllowAgentForwarding` (the Readme uses ProxyJump) and the `hosts` copy (20-netboot.sh
 writes `/etc/hosts`).
@@ -143,15 +149,33 @@ Stage 4, in this order (a–c must precede any package work in the image):
 - b. `etc/initramfs-tools/conf.d/pi-cluster` (`MODULES=netboot`) and
   `etc/modprobe.d/pi-cluster-blacklist.conf` (brcmfmac, brcmutil, btbcm, hci_uart).
 - c. `usr/sbin/policy-rc.d`.
-- d. `nfs-common` via `image-run.sh` (guard: `dpkg-query --admindir=/image/pi5/var/lib/dpkg`).
-- e. `image-run.sh update-initramfs -u -k all` (guard: `boot/firmware/initramfs_2712` newer than
+- d. `boot/firmware/cmdline.txt` (C8) and `etc/fstab` (C7). Moved ahead of e and f in Phase 2:
+  initramfs-tools' fsck hook reads the root line of this fstab, and the stock one names a
+  partition that does not exist inside the image.
+- e. `nfs-common` via `image-run.sh` (guard: `dpkg-query --admindir=/image/pi5/var/lib/dpkg`).
+- f. `image-run.sh update-initramfs -u -k all` (guard: `boot/firmware/initramfs_2712` newer than
   both files from b).
-- f. `boot/firmware/cmdline.txt` (C8) and `etc/fstab` (C7).
 - g. Remove `etc/hostname`; `etc/hosts` from `hosts_file`; empty `etc/resolv.conf`.
 - h. `image-run.sh systemd-tmpfiles --create /usr/lib/tmpfiles.d/debian.conf` (guard: `etc/mtab`
   links to `../proc/self/mounts`).
 - i. Units (C12) with `systemctl --root`, which checks state itself; `etc/cloud/cloud-init.disabled`.
-- j. `image-run.sh ssh-keygen -A` (guard: `etc/ssh/ssh_host_ed25519_key`); sshd drop-in.
+  Added in Phase 2 (D27): mask nfs-common's `rpc-statd-notify` and `nfs-blkmap`, which logged an
+  error at every node boot. nfs-client.target pulls in the first
+  (https://sources.debian.org/data/main/n/nfs-utils/1%3A2.8.3-1/systemd/nfs-client.target, line 8),
+  and the package enables the second for that target
+  (https://sources.debian.org/data/main/n/nfs-utils/1%3A2.8.3-1/systemd/nfs-blkmap.service, line 17).
+  sm-notify reads the peers to notify from `/var/lib/nfs/sm.bak`, a package directory
+  (https://sources.debian.org/data/main/n/nfs-utils/1%3A2.8.3-1/debian/nfs-common.dirs;
+  `support/nsm/file.c` line 101), which the nodes' RAM `/var` does not have. The nodes keep no NFSv3
+  locks to announce: the root is mounted `nolock`, and `/home` and `/opt` are NFSv4.2. blkmapd
+  waits for a pNFS block layout (`utils/blkmapd/device-discovery.c` lines 559-563), and exports
+  get pNFS only with the `pnfs` option (`utils/exportfs/exports.man`), which ours do not set.
+- j. `image-run.sh ssh-keygen -A` (guard: `etc/ssh/ssh_host_ed25519_key`); sshd drop-in. Added in
+  Phase 2: remove `etc/ssh/sshd_config.d/rename_user.conf`, the "SSH may not work until a valid
+  user has been set up" banner that pi-gen's `rename-user -f -s` leaves for the first-boot user
+  setup. userconf-pi's own `cancel-rename` removes it together with the two unit changes in i
+  (https://raw.githubusercontent.com/RPi-Distro/userconf-pi/pios/trixie/cancel-rename, lines 61-64;
+  `rename-user` lines 71-72 write it).
 - k. Drop-ins: timesyncd, NetworkManager, rpi-swap (C17).
 - l. Serial links: `ln -sfn firmware /image/pi5/boot/<serial>` for every registered node that
   has a serial, so a rebuilt image keeps booting the nodes.
@@ -172,6 +196,19 @@ Ports `templates/setup/add-node.sh`.
 
 The node's first TFTP attempt fails (no link yet); the bootloader retries and boots (F10).
 
+Added in Phase 2 (D26): `--replace` inserts a stage before stage 1. It forgets the board
+registered as node N, removing the registry line, its serial link and its DHCP lease, then
+continues as a new registration. The lease has to go because dnsmasq will not hand a configured
+address to a new MAC while an unexpired lease holds it for a MAC not in that `dhcp-host` line
+(dnsmasq 2.91 `src/rfc2131.c` lines 1117-1130, "not using configured address … because it is
+leased to …"). Our nodes never release their leases (kernel `ip=dhcp`), and the default lease
+is one hour (`src/config.h`, `DEFLEASE 3600`). The lease file on Linux is
+`/var/lib/misc/dnsmasq.leases` (`config.h`; Debian does not set `DHCP_LEASE`), one
+`expiry MAC address name client-id` line per lease (`src/lease.c`). The script stops dnsmasq,
+deletes the node's line and starts it again. Sources:
+https://sources.debian.org/data/main/d/dnsmasq/2.91-1%2Bdeb13u2/src/rfc2131.c and `src/config.h`,
+`src/lease.c` beside it.
+
 ## `head/image-run.sh [command…]`
 
 About 15 lines: `need_root`; stop if there is no image; warn with the addresses of connected
@@ -181,6 +218,14 @@ exit with nspawn's status. Without `--boot`: the command runs as PID 1; debhelpe
 service restarts and policy-rc.d stops init scripts (F30). `apt full-upgrade` and
 `update-initramfs` work this way once C9 and C13 are in place (F13, F14); confirmed on hardware
 in Phase 2.
+
+Changed in Phase 2 (D28): the warning names only connected addresses that answer one ping
+(`ping -c 1 -W 1`). The NFS server closes a silent client's connection on its second 6-minute
+sweep (https://raw.githubusercontent.com/raspberrypi/linux/rpi-6.18.y/net/sunrpc/svc_xprt.c,
+line 41 `svc_conn_age_period = 6*60`, lines 923-957 `svc_age_temp_xprts`), so a node that was
+just unplugged still shows in `ss` for up to 12 minutes. A running node never ages out: its
+NFSv4 lease renewals keep its connection busy. `ping` is in the Lite image (iputils-ping, F2's
+`.info` list).
 
 ## Packages
 
@@ -192,7 +237,8 @@ Head node, new:
   systemd-timesyncd on the head (F34).
 - `tcpdump`: 30-add-node.sh reads each node's MAC and serial from its boot packets.
 - `systemd-container`: `systemd-nspawn` for image-run.sh.
-- `partclone` (10-nvme.sh only): clones the card's partitions to NVMe.
+- `partclone` (10-nvme.sh only): clones the card's partitions to NVMe. Dropped in Phase 2
+  (D25): the rsync copy uses tools already in the image.
 - Already in the image, listed so the script does not depend on that: `xz-utils` (unpack the
   image), `curl` (download it), `rsync` (copy it).
 

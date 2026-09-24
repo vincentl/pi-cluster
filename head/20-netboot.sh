@@ -83,20 +83,7 @@ $GENERATED
 exit 101
 EOF
 
-# 4d. The NFS client, which mounts /home and /opt on the nodes.
-if ! image_has nfs-common; then
-    image_run apt-get update
-    image_run env DEBIAN_FRONTEND=noninteractive apt-get install -y nfs-common
-fi
-
-# 4e. Rebuild the initramfs if it is older than its settings.
-initramfs=$IMAGE/boot/firmware/initramfs_2712
-if [[ ! $initramfs -nt $IMAGE/etc/initramfs-tools/conf.d/pi-cluster ||
-      ! $initramfs -nt $IMAGE/etc/modprobe.d/pi-cluster-blacklist.conf ]]; then
-    image_run update-initramfs -u -k all
-fi
-
-# 4f. Boot over the network with a read-only NFS root; the node mounts the rest itself.
+# 4d. Boot over the network with a read-only NFS root, the rest mounted by the node (before any initramfs build reads fstab).
 put "$IMAGE/boot/firmware/cmdline.txt" <<EOF
 console=serial0,115200 console=tty1 root=/dev/nfs nfsroot=$HEAD_IP:$IMAGE,vers=3 ro ip=dhcp panic=60 ipv6.disable=1 cgroup_enable=memory
 EOF
@@ -108,6 +95,19 @@ $HEAD_IP:/opt   /opt    nfs    ro         0  0
 tmpfs           /var    tmpfs  mode=0755  0  0
 tmpfs           /media  tmpfs  mode=0755  0  0
 EOF
+
+# 4e. The NFS client, which mounts /home and /opt on the nodes.
+if ! image_has nfs-common; then
+    image_run apt-get update
+    image_run env DEBIAN_FRONTEND=noninteractive apt-get install -y nfs-common
+fi
+
+# 4f. Rebuild the initramfs if it is older than its settings.
+initramfs=$IMAGE/boot/firmware/initramfs_2712
+if [[ ! $initramfs -nt $IMAGE/etc/initramfs-tools/conf.d/pi-cluster ||
+      ! $initramfs -nt $IMAGE/etc/modprobe.d/pi-cluster-blacklist.conf ]]; then
+    image_run update-initramfs -u -k all
+fi
 
 # 4g. Names: DHCP gives each node its hostname, /etc/hosts lists the cluster, and there is no DNS.
 if [[ -e $IMAGE/etc/hostname ]]; then
@@ -125,16 +125,20 @@ if [[ $(readlink "$IMAGE/etc/mtab") != ../proc/self/mounts ]]; then
     image_run systemd-tmpfiles --create /usr/lib/tmpfiles.d/debian.conf
 fi
 
-# 4i. Services: first-boot helpers and jobs that need a writable /var/lib off; ssh and the console login on.
+# 4i. Services: first-boot helpers, jobs that need a writable /var/lib, and NFS helpers the nodes never use off; ssh and the console login on.
 touch "$IMAGE/etc/cloud/cloud-init.disabled"
 systemctl --root="$IMAGE" --quiet mask userconfig.service regenerate_ssh_host_keys.service \
     rpi-resize.service rpi-eeprom-update.service apt-daily.timer apt-daily-upgrade.timer \
-    dpkg-db-backup.timer man-db.timer
+    dpkg-db-backup.timer man-db.timer rpc-statd-notify.service nfs-blkmap.service
 systemctl --root="$IMAGE" --quiet disable rpcbind.service rpcbind.socket
 systemctl --root="$IMAGE" --quiet enable ssh.service getty@tty1.service
 
-# 4j. ssh: host keys made once and shared by every node; public-key logins only, as on the head node.
+# 4j. ssh: host keys made once and shared by every node; public-key logins only, as on the head node; no first-boot banner.
 [[ -e $IMAGE/etc/ssh/ssh_host_ed25519_key ]] || image_run ssh-keygen -A
+if [[ -e $IMAGE/etc/ssh/sshd_config.d/rename_user.conf ]]; then
+    rm "$IMAGE/etc/ssh/sshd_config.d/rename_user.conf"
+    log "removed the image's first-boot ssh banner"
+fi
 put "$IMAGE/etc/ssh/sshd_config.d/pi-cluster.conf" <<EOF
 $GENERATED
 PasswordAuthentication no

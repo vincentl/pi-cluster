@@ -12,14 +12,14 @@ Everything here is for driving AI sessions on this repo. Nothing in here runs on
 
 ## Start the next phase
 
-Open a Claude Code session in this repo with Opus and send:
+Phases 0-2 are done. Phase 3 (Slurm) is next; its plan is `ai/plans/phase-3-slurm.md`. Open a
+Claude Code session in this repo with Opus and send:
 
 ```
-Read ai/prompts/2026-09-22-trixie-refresh.md and carry it out, starting with Phase 0.
+Read ai/prompts/2026-09-22-trixie-refresh.md (Phase 3) and ai/plans/phase-3-slurm.md, and continue Phase 3.
 ```
 
-Before that, answer the questions in `ai/decisions.md` (at least D2, D3, D6, D9). Unanswered
-questions fall back to their stated default.
+Unanswered questions in `ai/decisions.md` fall back to their stated default.
 
 ## Conventions
 

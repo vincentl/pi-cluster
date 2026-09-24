@@ -20,6 +20,10 @@ log() { printf '==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 need_root() { [[ $EUID -eq 0 ]] || die "run this with sudo"; }
 
+# Everything in head/ runs on the head node: stop at once anywhere else, such as a workstation.
+[[ $(tr -d '\0' 2>/dev/null < /proc/device-tree/model) == "Raspberry Pi"* ]] ||
+    die "this script runs on the head node, not on $(hostname -s); ssh $HEAD_NODE first"
+
 # Compute node N: node_name 7 is pi-007, node_ip 7 is 10.0.1.7.
 node_name() { printf '%s%03d\n' "$NODE_PREFIX" "$((10#$1))"; }
 node_ip() { printf '%s.%d\n' "$NODE_SUBNET" "$((10#$1))"; }
