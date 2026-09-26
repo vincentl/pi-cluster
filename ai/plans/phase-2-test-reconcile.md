@@ -72,5 +72,5 @@ Carried into Phase 3:
 5. The `20-netboot.sh` output of the two second-session deploys was not pasted; their effects
    are verified either way.
 
-Phase 3 kickoff: `Read ai/prompts/2026-09-22-trixie-refresh.md (Phase 3) and
-ai/plans/phase-3-slurm.md, and continue Phase 3.`
+Phase 3 has since been planned and implemented; what is left is in
+`ai/prompts/2026-09-26-handoff.md` (kickoff: `Read ai/prompts/2026-09-26-handoff.md and carry it out.`).

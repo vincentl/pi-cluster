@@ -6,11 +6,6 @@ source "$(dirname "$0")/lib.sh"
 need_root
 [[ $(root_source) != /dev/mmcblk* ]] || die "/ is still on the microSD card; run 10-nvme.sh first"
 
-image_run() { bash "$REPO/head/image-run.sh" "$@"; }
-image_has() {
-    [[ $(dpkg-query --admindir="$IMAGE/var/lib/dpkg" -W -f '${db:Status-Status}' "$1" 2>/dev/null) == installed ]]
-}
-
 # 1. eth0 gets HEAD_IP on the cluster network: no gateway, no IPv6, no reboot.
 if [[ $(nmcli -g ipv4.addresses connection show pi-cluster 2>/dev/null) != "$HEAD_IP/$PREFIX" ]]; then
     for addr in "$HEAD_IP" "$(node_ip 1)" "$(node_ip 254)"; do
@@ -59,9 +54,7 @@ if [[ ! -e $IMAGE/etc/os-release ]]; then
 fi
 
 # 4a. Image accounts: the head node's users and passwords, copied before any package adds users.
-for f in passwd shadow group gshadow; do
-    cmp -s "/etc/$f" "$IMAGE/etc/$f" || { cp -p "/etc/$f" "$IMAGE/etc/$f"; log "copied /etc/$f into the image"; }
-done
+copy_accounts
 
 # 4b. Image initramfs: NFS and network drivers (the image's MODULES=dep fails inside nspawn); no wifi or bluetooth.
 put "$IMAGE/etc/initramfs-tools/conf.d/pi-cluster" <<EOF
@@ -221,4 +214,4 @@ $IMAGE  $NODE_NET(ro,sync,no_subtree_check,no_root_squash)
 EOF
 if (( CHANGED )); then exportfs -ra; fi
 showmount -e
-log "done; next, register compute node 1: sudo bash $(dirname "$0")/30-add-node.sh 1"
+log "done; next, add Slurm: sudo bash $(dirname "$0")/25-slurm.sh"

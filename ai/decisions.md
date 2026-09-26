@@ -245,3 +245,65 @@ line promises a Slurm cluster.
 Answer: (a), 2026-09-23. This repo's remote is the private
 `git@github.com:vincentl/pi-cluster-dev.git`, which Vincent created. The public repo comes when
 the whole setup is nearly complete, after Phase 3; there is no hurry.
+
+## D30. Where Slurm goes in the procedure
+
+Phase 3 plan, C1. (a) `head/25-slurm.sh` in Readme section 3, right after `20-netboot.sh`: every
+node registered afterwards joins Slurm by itself. (b) The kickoff's `head/40-slurm.sh` after the
+nodes: every node is then unplugged and plugged in again, two physical steps per node, because
+the image changes under the nodes and they must restart to start slurmd.
+Default: (a). This cluster, whose nodes are already registered, is unplugged once for the test.
+Answer: (a), default, 2026-09-24.
+
+## D31. How nodes get Slurm's configuration
+
+(a) Configless: slurmd fetches `slurm.conf` and `cgroup.conf` from slurmctld at boot; the image
+holds only `--conf-server`. (b) A copy in the image, rewritten whenever a node is added. (c) The
+old notes' way: files in `/opt`, included from `/etc/slurm`.
+Default: (a).
+Answer: (a), default, 2026-09-24.
+
+## D32. Where the node list comes from
+
+(a) Generated from the registry, with `NODE_CPUS` and `NODE_MEMORY` in `cluster.env` for every
+node (D17, kickoff). (b) Dynamic nodes: each slurmd registers itself (`slurmd -Z`), with no node
+lines; they keep their first registration's settings until deleted by hand.
+Default: (a).
+Answer: (a), default, 2026-09-24.
+
+## D33. What else from the old Slurm notes
+
+MPI (`MpiDefault=pmi2`, PMIx, mpich), UCX, and prolog/epilog scripts for a per-job
+`SLURM_TMPDIR` are in `notes/slurm-mpi-shmem.md`.
+Default: none of them in Phase 3; D2 keeps MPI as notes. Jobs use the node's `/tmp`, in RAM.
+Answer: default, 2026-09-24: none of them in Phase 3.
+
+## D34. Memory that jobs may use
+
+`NODE_MEMORY` in `cluster.env`: a node's memory (`MemTotal` or `slurmd -C`) minus about 1 GiB for
+the system, whose `/var` and `/tmp` are also in RAM. `DefMemPerCPU` is `NODE_MEMORY / NODE_CPUS`.
+`ConstrainSwapSpace=yes`: a job that runs out of memory is stopped instead of swapping into zram.
+Default: as above; the number is set from pi-001's `MemTotal` before implementing.
+Answer: default, 2026-09-24. `NODE_MEMORY=15000` until pi-001's `MemTotal` is in; Vincent
+gets the node facts when the cluster is back up.
+Update 2026-09-26: pi-001 reports `MemTotal: 16607536 kB` and `slurmd -C` `RealMemory=16218`.
+`NODE_MEMORY=15000` stays: it leaves 1218 MiB for the system (test log 2026-09-24, 5.15).
+
+## D35. munge, or Slurm's own authentication
+
+Asked 2026-09-24 by Vincent: are munge and its key needed on the compute nodes? With munge
+(`AuthType=auth/munge`, the default), yes: munge signs every Slurm message, including those
+between slurmctld and each slurmd, and from srun on pi-login straight to slurmd on a node
+(Phase 3 plan, F26). The alternative is Slurm's own authentication, in Slurm since 23.11 and in
+Debian's packages (F27, F28): one `/etc/slurm/slurm.key`, owned by the slurm user (UID 64030
+everywhere), on pi-login and in the image; slurmctld and slurmd do the work themselves, and no
+munged runs anywhere.
+(a) munge, as the plan stands: the common setup that most guides and help use; the plan
+already handles its three quirks (key before install, the same UID, a drop-in for its `/var`
+directories).
+(b) auth/slurm: no munge daemon on any machine, no munge key or UID handling; munge stays
+installed as a dependency but masked (F30). Costs: newer and less common; tokens last 60 s
+instead of 300 s; slurmd's drop-in needs `SLURM_SACK_KEY=/etc/slurm/slurm.key` because
+configless slurmd looks for the key next to its cached config (F29); to be proven on hardware.
+Default: (a).
+Answer: (b), auth/slurm, 2026-09-24 ("let's try auth/slurm!").

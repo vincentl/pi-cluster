@@ -12,11 +12,12 @@ Everything here is for driving AI sessions on this repo. Nothing in here runs on
 
 ## Start the next phase
 
-Phases 0-2 are done. Phase 3 (Slurm) is next; its plan is `ai/plans/phase-3-slurm.md`. Open a
-Claude Code session in this repo with Opus and send:
+Phases 0-2 are done; Phase 3 (Slurm) is implemented and partly tested on hardware. What is left,
+in order, is in `ai/prompts/2026-09-26-handoff.md`. Open a Claude Code session in this repo with
+Opus and send:
 
 ```
-Read ai/prompts/2026-09-22-trixie-refresh.md (Phase 3) and ai/plans/phase-3-slurm.md, and continue Phase 3.
+Read ai/prompts/2026-09-26-handoff.md and carry it out.
 ```
 
 Unanswered questions in `ai/decisions.md` fall back to their stated default.

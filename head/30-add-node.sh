@@ -75,7 +75,10 @@ else
     log "$name boots from $IMAGE/boot/$serial"
 fi
 
-# 6. Summary.
+# 6. Slurm, once 25-slurm.sh has run: the node in slurm.conf, and slurmctld told about it.
+slurm_update
+
+# 7. Summary.
 cat <<EOF
 
 $name  MAC $mac  serial $serial  address $ip

@@ -8,7 +8,8 @@ system, so adding a node is one command and one cable.
 ![A head node and two compute nodes on their PoE switch](docs/images/01-cluster.jpg)
 
 > **Status:** tested on hardware on 2026-09-23 with a head node and three compute nodes, on
-> Raspberry Pi OS Lite trixie (the 2026-09-15 image). Slurm is not scripted yet.
+> Raspberry Pi OS Lite trixie (the 2026-09-15 image). Slurm (`25-slurm.sh`) is written but not yet
+> tested on hardware.
 
 ## How it works
 
@@ -75,6 +76,7 @@ pi-cluster/
 ├── head/
 │   ├── 10-nvme.sh       copy the head node from microSD to NVMe
 │   ├── 20-netboot.sh    turn the head node into a network boot server
+│   ├── 25-slurm.sh      add Slurm: the controller, slurmd in the image, the cluster's key
 │   ├── 30-add-node.sh   register one compute node
 │   ├── image-run.sh     run a command inside the compute node image
 │   └── lib.sh           shared by the scripts above
@@ -224,7 +226,7 @@ ssh pi-login findmnt -n -o SOURCE /
 
 prints a `/dev/nvme…` device.
 
-## 3. Enable network boot
+## 3. Enable network boot and Slurm
 
 One script turns the head node into a boot server. It takes ten to twenty minutes, mostly
 downloading and unpacking the operating system image. It
@@ -244,6 +246,17 @@ sudo bash pi-cluster/head/20-netboot.sh
 ```
 
 When it finishes, `showmount -e` lists the three exports.
+
+Then add [Slurm](https://slurm.schedmd.com/), the job scheduler. A second script makes the
+cluster's key, installs the Slurm controller on pi-login and the Slurm node daemon in the compute
+image. Slurm authenticates with that key itself, so munge, which its packages install, stays
+off. Nodes get Slurm's settings from pi-login when they boot, so each node you register in
+section 4 joins Slurm by itself; the controller starts with the first one.
+
+```bash
+# pi-login
+sudo bash pi-cluster/head/25-slurm.sh
+```
 
 ## 4. Add compute nodes
 
@@ -283,7 +296,8 @@ It is up about a minute after its first boot request. From your workstation:
   ssh pi-001 uptime
 ```
 
-About a minute later the node is up:
+Once Slurm is set up, the script also adds the node to Slurm's settings. About a minute later the
+node is up:
 
 ```bash
 # workstation
@@ -313,6 +327,14 @@ NTPSynchronized=yes
 The head node's three services are running; the node's root is the image, read-only, with
 `/home` read-write and `/opt` read-only (mount options shortened here); and its clock is set.
 
+```bash
+# workstation
+ssh pi-login 'sinfo; srun -N1 hostname'
+```
+
+`sinfo` lists every registered node as `idle` in the partition `main`, and `srun` prints the name
+of the node that ran it.
+
 ## Maintenance
 
 | Task                             | How                                                                    |
@@ -322,7 +344,8 @@ The head node's three services are running; the node's root is the image, read-o
 | Replace a node's board           | Unplug the old board, run `sudo bash pi-cluster/head/30-add-node.sh N --replace`, and connect the new board when asked. Set its bootloader first, as in section 4 |
 | Update the compute image         | `sudo bash pi-cluster/head/image-run.sh apt update`, the same with `apt full-upgrade -y`, then reboot the nodes |
 | Open a shell in the compute image | `sudo bash pi-cluster/head/image-run.sh`                              |
-| Rebuild the compute image        | `sudo rm -rf /image/pi5`, then run `20-netboot.sh` again. Registered nodes keep booting |
+| Rebuild the compute image        | `sudo rm -rf /image/pi5`, then run `20-netboot.sh` and `25-slurm.sh` again. Registered nodes keep booting |
+| Change Slurm settings            | Add them to `/etc/slurm/slurm-local.conf` on pi-login, then `sudo scontrol reconfigure`. The scripts never change that file |
 | Re-run any script                | Always safe. Finished steps are skipped                                |
 
 Power the compute nodes off before changing the image they run from.
@@ -347,12 +370,20 @@ Power the compute nodes off before changing the image they run from.
   itself), `armstub8-2712.bin not found` (the firmware uses its built-in one) and
   `error 0 Early terminate received`. While `30-add-node.sh` registers a node, the node's first
   requests fail too: the script creates the link when it sees them, and the node asks again.
+- **A node is `down` or `drained` in `sinfo`.** `scontrol show node pi-001` on pi-login gives the
+  reason, and `journalctl -u slurmd -b` on the node shows what slurmd saw. A node with less
+  memory than `NODE_MEMORY` in `cluster.env` is drained: lower the value, run `25-slurm.sh`
+  again, then `sudo scontrol update NodeName=pi-001 State=RESUME`.
 - **The node boots without `/home`.** `exportfs -v` on the head node must list `/home` for
   10.0.1.0/24.
 
 ## Slurm
 
-Not scripted yet: munge and Slurm are the next part of this guide.
+One partition, `main`, holds every registered node and is the default. Slurm hands out cores
+and memory: a job that does not say how much memory it needs gets `NODE_MEMORY / NODE_CPUS` MiB
+per core, and a job that uses more than it has is stopped rather than swapping. Submit jobs from
+pi-login with `srun`, `sbatch` or `salloc`; your home directory is the same on every node. There
+is no accounting database and no MPI setup.
 
 ## Notes
 
@@ -364,7 +395,8 @@ Not scripted yet: munge and Slurm are the next part of this guide.
   With all four cores busy, it held the Pi at 63 °C. Both work with this guide, and neither
   needs setting up.
 - **Security** assumes a private LAN. `/home` is exported without root squashing, so root on
-  any node can read and change every user's files.
+  any node can read and change every user's files. The cluster's Slurm key is in the compute
+  image, so any machine on the cluster network that can mount `/image/pi5` can read it.
 
 ## References
 
