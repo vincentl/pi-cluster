@@ -154,14 +154,35 @@ $GENERATED
 Mechanism=zram
 EOF
 
-# 4l. TFTP links for the registered nodes, so a rebuilt image still boots them.
+# 4l. eth0 with TCP segmentation offload off at every boot, a workaround for the Pi 5's Ethernet stalls (Readme, Troubleshooting).
+put "$IMAGE/etc/systemd/system/pi-cluster-eth0.service" <<EOF
+$GENERATED
+[Unit]
+Description=eth0 without segmentation offload
+# Early in boot, before any network service starts.
+DefaultDependencies=no
+Wants=network-pre.target
+Before=network-pre.target shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/ethtool -K eth0 tso off gso off
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl --root="$IMAGE" --quiet enable pi-cluster-eth0.service
+
+# 4m. TFTP links for the registered nodes, so a rebuilt image still boots them.
 if [[ -e $NODES ]]; then
     sed -n 's/.*# serial \([0-9a-f]\{8\}\).*/\1/p' "$NODES" | while read -r serial; do
         [[ -L $IMAGE/boot/$serial ]] || { ln -s firmware "$IMAGE/boot/$serial"; log "linked $IMAGE/boot/$serial"; }
     done
 fi
 
-# 4m. Last, an empty machine ID, so each node makes its own at boot.
+# 4n. Last, an empty machine ID, so each node makes its own at boot.
 : > "$IMAGE/etc/machine-id"
 mkdir -p "$IMAGE/var/lib/dbus"
 ln -sfn /etc/machine-id "$IMAGE/var/lib/dbus/machine-id"

@@ -1,15 +1,27 @@
 # Phase 3 plan: Slurm
 
-Status: approved by Vincent on 2026-09-24 with the defaults for D30-D34 and auth/slurm for D35;
-implemented the same day (`head/25-slurm.sh`, `lib.sh`, `20-netboot.sh`, `30-add-node.sh`,
-`cluster.env`, Readme, `docs/testing.md`); `make check` clean; `slurm_update`'s output checked
-with stubs under trixie's bash 5.2. On hardware (nodes 1-3, 2026-09-24): core and memory limits,
-auth/slurm and configless slurmd work (`ai/test-logs/2026-09-24.md`). What is left is in
-`ai/prompts/2026-09-26-handoff.md`.
+Status: done 2026-09-29, closed by the closing Phase 3 commit. Approved by Vincent on 2026-09-24
+with the defaults for D30-D34 and auth/slurm for D35; implemented the same day
+(`head/25-slurm.sh`, `lib.sh`, `20-netboot.sh`, `30-add-node.sh`, `cluster.env`, Readme,
+`docs/testing.md`); `make check` clean; `slurm_update`'s output checked with stubs under trixie's
+bash 5.2. On hardware:
+- nodes 1-3, 2026-09-24: core and memory limits, auth/slurm and configless slurmd
+  (`ai/test-logs/2026-09-24.md`);
+- 2026-09-27, with node 4 added: 3.13-3.14, 5.11, 5.12, 5.15-5.17 and D36
+  (`ai/test-logs/2026-09-27.md`);
+- 2026-09-28: a fresh build from a blank card following the Readme, the first run of
+  `25-slurm.sh` with no node registered and of the first registration starting slurmctld
+  (`ai/test-logs/2026-09-28.md`).
+
+Human steps, by the Phase 1 plan's counting rule: 23 (+2 if the NVMe slot needs enabling), 5 for
+each further node, as planned: `25-slurm.sh` in section 3 and the `sinfo`/`srun` check in section
+5; D36 added none. Not yet run with Slurm installed: M.2-M.4, the image upgrade. What is left is
+in `ai/prompts/2026-09-26-handoff.md`.
 
 Kickoff: `ai/prompts/2026-09-22-trixie-refresh.md`, "Phase 3: Slurm" (D2 answered b). Facts are
-rows F1-F33 at the end; each was fetched on 2026-09-23 or 2026-09-24 from the source given,
-nothing from memory. Decisions: D30-D35 in `ai/decisions.md`.
+rows F1-F42 at the end, each fetched from the source given, nothing from memory: F1-F33 on
+2026-09-23 or 2026-09-24, F34-F42 (eth0, D36, boot order) on 2026-09-26 or 2026-09-27.
+Decisions: D30-D36 in `ai/decisions.md`.
 
 ## The design in one paragraph
 
@@ -196,6 +208,30 @@ further node, unchanged.
 - Debian's `plugstack.conf`, which includes an empty `plugstack.conf.d/`, is served to the nodes
   without error.
 
+## eth0 offloads (D36, added 2026-09-27)
+
+Vincent reported on 2026-09-26 that one compute node had network trouble, and that
+`sudo ethtool -K eth0 tso off gso off` on it seemed to help until the next boot. The Pi 5's
+Ethernet has a known transmit stall (F34). The nodes' kernel already recovers from it after
+about 5 s (F35, F36); reports differ on whether turning offloads off prevents it (F37).
+
+- `20-netboot.sh` stage 4l writes `pi-cluster-eth0.service` into the image and enables it: a
+  oneshot that runs `/usr/sbin/ethtool -K eth0 tso off gso off` early at every boot
+  (`DefaultDependencies=no`, before `network-pre.target`; F40, F41). Every compute node gets it,
+  node 4 included; the head node never boots the image, so its eth0 is unchanged. Not a `.link`
+  file (F38) and not NetworkManager, which leaves the nodes' eth0 alone (F39). The old 4l and 4m
+  are now 4m and 4n.
+- Readme: section 3's list of what `20-netboot.sh` does, and a Troubleshooting entry (the
+  symptom, the `NETDEV WATCHDOG` line, the setting).
+- `docs/testing.md`: 5.17 (the setting on every node), 5.18 (stalls counted after a day of use).
+- Deploy: nodes unplugged, `20-netboot.sh` (one new line,
+  `wrote /image/pi5/etc/systemd/system/pi-cluster-eth0.service`), nodes plugged back in; then
+  5.17, and `sinfo -N` with all three `idle` and no command (5.14 for every node at once). Done
+  2026-09-27 on nodes 1-4, all as expected (`ai/test-logs/2026-09-27.md`).
+- Open: which node and what the trouble looked like; whether EEE is active on the nodes
+  (`/usr/sbin/ethtool --show-eee eth0`), which the Talos fix also turned off (F37). Checks call
+  ethtool by its full path: `/usr/sbin` is not on `pi`'s PATH (first 5.17 run, 2026-09-27).
+
 ## Facts
 
 S = `https://sources.debian.org/src/slurm-wlm/24.11.5-4+deb13u1/`,
@@ -239,6 +275,15 @@ A = `https://slurm.schedmd.com/archive/slurm-24.11.5/`. Line numbers are in thos
 | F31 | SACK sockets | slurmctld listens on `/run/slurmctld/sack.socket`, slurmd and sackd on `/run/slurm/sack.socket`; the directory must be owned by SlurmUser or root (root: a warning; anyone else: fatal); on reconfigure the socket passes to the restarted daemon through `SACK_RECONFIG_FD`. Client commands try `/run/slurm`, then `/run/slurmctld`, then `/run/slurmdbd` | S src/plugins/auth/slurm/sack.c L64-66, L79-120, L258-292 ; S src/common/sack_api.c L52-92 | pi-login's commands use slurmctld's socket; on a node, `/run/slurm` is root's (warning only) |
 | F32 | Who reads the key | Only sackd, slurmd, slurmctld and slurmdbd load the key; client commands and slurmstepd run as clients of the local socket | S src/plugins/auth/slurm/auth_slurm.c L107-127 | The key is needed on pi-login and in the image, for the daemons only |
 | F33 | Key checks | A key that cannot be stat'ed is fatal; any permission for others is fatal; an owner other than root or SlurmUser only warns | S src/plugins/auth/slurm/internal.c (`_check_key_permissions`) | `slurm:slurm` 0600 |
+| F34 | The Pi 5's Ethernet stall | "The MACB found in the Raspberry Pi RP1 suffers from sporadic stalls on the TX queue", likely a lost TSTART write; the fix adds a TX timeout handler that restarts the queue, so it recovers rather than prevents. Accepted upstream 2026-06-19 as e438ec3e9e95; mainline `master` contains it | https://github.com/torvalds/linux/commit/e438ec3e9e95cd3f49a8120e5f63ae3f9606e6fa ; `gh api repos/torvalds/linux/compare/e438ec3e9e95…master` (`behind_by` 0) | The offload setting is a workaround on top of the kernel's recovery |
+| F35 | In the Pi kernel | On `rpi-6.18.y` since 6.18.38 (73ad03c8b5d3, 2026-07-14; again as 68af74ad696c, 6.18.39) and not reverted since; Linux 6.18.50, the image's kernel (Phase 1 plan, F2), reached the branch on 2026-09-07. The same branch turned EEE on for RP1 on 2026-04-20 (f6c4ee984e39) | `gh api 'repos/raspberrypi/linux/commits?sha=rpi-6.18.y&path=drivers/net/ethernet/cadence/macb_main.c'` ; the branch's `Makefile` at those commits and its history | The nodes' kernel already recovers from stalls |
+| F36 | How a stall shows | The watchdog runs only for drivers with `ndo_tx_timeout` (macb now has `macb_tx_timeout`), fires when a stopped queue has sent nothing for `watchdog_timeo`, 5 s unless the driver sets it (macb does not), logs `NETDEV WATCHDOG: CPU: N: transmit queue N timed out N ms`, then calls the driver | rpi-6.18.y (2026-09-27) `net/sched/sch_generic.c` L519-549, L568-571 ; `drivers/net/ethernet/cadence/macb_main.c` L4699, L4724 | Readme Troubleshooting; 5.18 counts these lines |
+| F37 | Reports of the workaround | Talos on rpi-6.18.y 6.18.24: node unreachable while its link LEDs blink, no driver errors; EEE off, `tso off gso off` and larger rings, "confirmed stable on 24-node fleet". Ubuntu (6.17, 7.0, 6.18): the TX counter stops while RX goes on; `tso off sg off`, both needed. A CM5 fleet: TSO/GSO off did not prevent it; relies on e438ec3e9e95 | https://github.com/siderolabs/sbc-raspberrypi/issues/91 ; https://bugs.launchpad.net/ubuntu/+source/linux-raspi/+bug/2133877 ; https://dtype.org/wiki/Cm5_macb_network_hang | A workaround, not a fix; count stalls (5.18) |
+| F38 | Offloads from udev | A `.link` file can set `TCPSegmentationOffload=` and `GenericSegmentationOffload=`, but only the first matching `.link` file in lexical order applies; later ones are ignored | https://manpages.debian.org/trixie/udev/systemd.link.5.en.html (systemd 257.13) | A unit, so no `.link` file Pi OS applies to eth0 is displaced |
+| F39 | Offloads from NetworkManager | Profiles have `ethtool.feature-tso`, `ethtool.feature-gso` and `ethtool.feature-sg`; on the nodes NM leaves eth0 alone (Phase 1 plan, C17), so they apply only on pi-login | https://manpages.debian.org/trixie/network-manager/nm-settings-nmcli.5.en.html | D36 (c), for the head node |
+| F40 | Ordering and conditions | `network-pre.target` is "pulled in by services that want to run before any network is set up … All network management software orders itself after this target". `ConditionHost=` takes a hostname (globs allowed) or machine ID; a `\|` prefix makes a condition triggering, and any one triggering condition suffices | https://manpages.debian.org/trixie/systemd/systemd.special.7.en.html ; https://manpages.debian.org/trixie/systemd/systemd.unit.5.en.html | The unit's ordering; D36 (b) |
+| F41 | ethtool | `/usr/sbin/ethtool` in trixie's ethtool package; in the image, since Vincent ran it on a node | https://packages.debian.org/trixie/arm64/ethtool/filelist | `ExecStart=/usr/sbin/ethtool` |
+| F42 | Head node boot order | `BOOT_ORDER` is read right to left: 0x1 SD card, 0x6 NVMe, 0x4 USB mass storage, 0xf restart. pi-login's bootloader has `BOOT_ORDER=0xf461` (`rpi-eeprom-config`, 2026-09-27), so a card in the slot boots before the NVMe | https://raw.githubusercontent.com/raspberrypi/documentation/master/documentation/asciidoc/computers/raspberry-pi/eeprom-bootloader.adoc (BOOT_ORDER) | The fresh build boots from its new card; the Readme's Maintenance row "the Pi boots from it first" holds |
 
 Also: cgroup v2 needs dbus on the node, since slurmd asks systemd for its scope over the system
 bus and stops if that fails (S src/plugins/cgroup/v2/cgroup_dbus.c L265-273); `Delegate=yes` is

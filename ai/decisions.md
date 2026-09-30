@@ -83,6 +83,10 @@ results to `ai/test-logs/`. If no, Claude prints commands and expected output an
 results.
 Default: no.
 Answer: no, 2026-09-22. Vincent runs every command and pastes output.
+Update 2026-09-27: "You can ssh to pi-login and run." Claude runs commands on pi-login, and from
+there on the nodes, through Vincent's ssh agent. sudo needs his password, which Claude never
+types, so steps that need root stay with him. Given for the Phase 3 checks; in a later session,
+ask whether it still stands.
 
 ## D10. `manage.sh`
 
@@ -307,3 +311,25 @@ instead of 300 s; slurmd's drop-in needs `SLURM_SACK_KEY=/etc/slurm/slurm.key` b
 configless slurmd looks for the key next to its cached config (F29); to be proven on hardware.
 Default: (a).
 Answer: (b), auth/slurm, 2026-09-24 ("let's try auth/slurm!").
+
+## D36. eth0 offloads on the compute nodes
+
+Reported 2026-09-26 by Vincent: one compute node has network trouble, and
+`sudo ethtool -K eth0 tso off gso off`, run by hand on it, seems to help; the setting is lost at
+the next boot. The Pi 5's Ethernet controller (the Cadence MACB in RP1) has a known transmit
+stall. The nodes' kernel already recovers from it after about 5 s and logs `NETDEV WATCHDOG`;
+reports differ on whether turning offloads off prevents it (Phase 3 plan, F34-F37).
+(a) All compute nodes: a oneshot unit in the image, `pi-cluster-eth0.service`, written and
+enabled by `20-netboot.sh`, runs the same ethtool command early at every boot. The head node
+never boots the image, so its eth0 is unchanged.
+(b) Only the affected node: the same unit with `ConditionHost=pi-00N` (F40).
+(c) The head node as well, which has the same controller and sends the most: on pi-login
+NetworkManager owns eth0, so `nmcli connection modify pi-cluster ethtool.feature-tso off
+ethtool.feature-gso off` (F39), in effect from the next reboot.
+Default: (a).
+Answer: (a), 2026-09-27: Vincent deploys it by rerunning `20-netboot.sh` and rebooting the
+nodes. The head node stays as it is. EEE stays as it is unless
+`/usr/sbin/ethtool --show-eee eth0` on a node shows it active (the Talos fix also turned it off,
+F37). Still to record: which node, and what the trouble looked like.
+Deployed and checked on nodes 1-4, 2026-09-27: the unit is active and both offloads are off on
+every node (`ai/test-logs/2026-09-27.md`).

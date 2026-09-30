@@ -5,11 +5,7 @@ One head node boots from an NVMe drive and provides everything else. Compute nod
 no storage of their own: they boot over the network and share a single read-only operating
 system, so adding a node is one command and one cable.
 
-![A head node and two compute nodes on their PoE switch](docs/images/01-cluster.jpg)
-
-> **Status:** tested on hardware on 2026-09-23 with a head node and three compute nodes, on
-> Raspberry Pi OS Lite trixie (the 2026-09-15 image). Slurm (`25-slurm.sh`) is written but not yet
-> tested on hardware.
+![Four compute nodes and, on the right, the head node with its SSD, standing on their PoE switch, each on its own Ethernet cable to it](docs/images/01-cluster.jpg)
 
 ## How it works
 
@@ -228,14 +224,15 @@ prints a `/dev/nvme…` device.
 
 ## 3. Enable network boot and Slurm
 
-One script turns the head node into a boot server. It takes ten to twenty minutes, mostly
+One script turns the head node into a boot server. It takes five to twenty minutes, mostly
 downloading and unpacking the operating system image. It
 
 - configures `eth0` as 10.0.0.1, without a reboot,
 - installs and configures DHCP, TFTP, NFS and a time server,
 - downloads the current Raspberry Pi OS Lite image, checks it and unpacks it to `/image/pi5`,
 - turns that copy into a network-boot image: NFS root, RAM for `/tmp` and `/var`, your user
-  account, ssh host keys, no wifi,
+  account, ssh host keys, no wifi, and TCP segmentation offload off on `eth0` (see
+  Troubleshooting),
 - serves the image's `/boot` over TFTP and exports `/image/pi5`, `/home` and `/opt` over NFS,
 - turns off cloud-init on the head node. Imager uses it to apply your settings on the first
   boot; after that it would rewrite `/etc/hosts` at every boot and drop the node names.
@@ -332,6 +329,12 @@ The head node's three services are running; the node's root is the image, read-o
 ssh pi-login 'sinfo; srun -N1 hostname'
 ```
 
+```
+PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
+main*        up   infinite      4   idle pi-[001-004]
+pi-001
+```
+
 `sinfo` lists every registered node as `idle` in the partition `main`, and `srun` prints the name
 of the node that ran it.
 
@@ -354,6 +357,10 @@ Power the compute nodes off before changing the image they run from.
 
 - **`ssh pi-login` cannot find the host.** `pi-login.local` is not resolving; use the address
   from your router as `HostName`.
+- **ssh refuses with `REMOTE HOST IDENTIFICATION HAS CHANGED`.** After you rebuild the head
+  node or the compute image, they have new host keys. Forget the old ones on your workstation,
+  then connect again: `ssh-keygen -R pi-login.local`, and `ssh-keygen -R pi-001` and so on for
+  the nodes.
 - **`20-netboot.sh` says your wifi network already uses an address.** Your home network uses
   the cluster's addresses. Choose other `CLUSTER_NET`, `HEAD_IP` and `NODE_SUBNET` values in
   `cluster.env` and run the script again.
@@ -376,6 +383,12 @@ Power the compute nodes off before changing the image they run from.
   again, then `sudo scontrol update NodeName=pi-001 State=RESUME`.
 - **The node boots without `/home`.** `exportfs -v` on the head node must list `/home` for
   10.0.1.0/24.
+- **A node stops answering for a while, although its link lights keep blinking.** The Pi 5's
+  Ethernet controller sometimes stops sending. The kernel restarts it after about five seconds
+  and logs `NETDEV WATCHDOG: … transmit queue … timed out`; look with `journalctl -k` on the
+  node before it reboots, since the nodes keep their logs in RAM. Turning off TCP segmentation
+  offload is a common workaround, so the image does that on the nodes' `eth0` at every boot:
+  `/usr/sbin/ethtool -k eth0 | grep segmentation-offload` on a node shows it `off`.
 
 ## Slurm
 
