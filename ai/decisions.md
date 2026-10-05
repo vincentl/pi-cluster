@@ -333,3 +333,141 @@ nodes. The head node stays as it is. EEE stays as it is unless
 F37). Still to record: which node, and what the trouble looked like.
 Deployed and checked on nodes 1-4, 2026-09-27: the unit is active and both offloads are off on
 every node (`ai/test-logs/2026-09-27.md`).
+5.18, 2026-10-05: no `NETDEV WATCHDOG` line on any node; pi-002 to pi-004 had been up 2 days
+16 hours, through another session's work (`ai/test-logs/2026-10-05.md`).
+
+## D37. Section 4's bootloader step
+
+Asked 2026-09-28 by Vincent (`notes.md`, after the fresh build): "Set the bootloader, once per
+node" is too compact; expand it into a subsection with a table like section 1's.
+(a) Split section 4 into "Set each node's bootloader (once)" and "Register the node". The first
+gets Imager's screens as a table (Device, OS, Storage), then numbered steps: put the card in the
+node, connect it to the switch, wait for the green LED to flash rapidly without stopping (a
+connected screen turns green), unplug the node, remove the card; the same card does every node.
+Before writing, check Imager 2.0.11.1's screens for a utility image, which should have no
+customisation screens (Phase 1 plan, F5).
+(b) Keep one paragraph, as a numbered list.
+Default: (a).
+Answer: (a), 2026-09-29 ("proceed with your proposal"). Imager's entry for this image has
+`"init_format": "none"`, so it asks no customisation questions (os_list_imagingutility_v4.json,
+2026-09-29).
+
+## D38. Saying where each command runs
+
+Asked 2026-09-28 by Vincent (`notes.md`): commands say where they run in different ways
+(`# workstation` and `# pi-login` comments, one-liners that start `ssh pi-login …`, some blocks
+with no label); standardize, perhaps with one callout color per machine. GitHub cannot do the
+colors: color display works only in issues, pull requests and discussions, not in a README, and
+its alert boxes (`> [!NOTE]` and four more) have fixed titles, so none can say "pi-login"
+(docs.github.com, "Basic writing and formatting syntax", 2026-09-29).
+(a) Every block's first line is a comment naming its machine: `# your computer`, `# pi-login`,
+`# pi-001`; one line in "Before you start" explains it. Quick checks stay one-liners run from
+your computer (`ssh pi-login …`), labelled `# your computer`, so a check that reads a node still
+shows its output in one block. Plain text, harmless when pasted, works in any viewer.
+(b) (a), plus a short bold line with an emoji above each block (💻 your computer, 🖥️ pi-login,
+🍓 a compute node) as the visual cue in place of color.
+(c) Run everything from your computer, the scripts too (`ssh -t pi-login sudo bash …`): one kind
+of block, but a dropped connection stops a long script (the NVMe copy, the image download), so
+the guide would need tmux or similar.
+Default: (a).
+Answer: (a), 2026-09-29. The label is `# workstation`, the word the Readme and the scripts'
+own output ("From your workstation:") already use, rather than "your computer".
+
+## D39. Troubleshooting
+
+Asked 2026-09-28 by Vincent (`notes.md`): the section is dense, grown from the problems met while
+testing; thin it out, or offer a prompt for an AI chatbot instead.
+(a) Thin it out and restructure: keep what a first-time builder is likely to meet, one or two
+lines each, as a table (symptom, what to check, fix); the rare ones (the faulty-memory flash code,
+the Ethernet stall) get one line each. Then a short "Before asking for help" block: the few
+commands whose output answers most questions (dnsmasq's log, `showmount -e`, `sinfo`, the node's
+journal), to paste to a person or an AI assistant together with a link to the Readme.
+(b) (a) without the "Before asking for help" block.
+(c) Replace the list with a prompt for an AI assistant. The common fixes are one line each, and
+the guide should work without a chatbot.
+Default: (a).
+Answer: (a), 2026-09-29.
+Update 2026-10-04 (Vincent: "I am not support"): the "Before asking for help" block became
+"Getting help from an AI coding assistant": the reader's own copy of the repository (with their
+`cluster.env`), two diagnostic commands, and a prompt for an assistant such as Claude Code.
+
+## D40. ssh between pi-login and the nodes without questions
+
+Asked 2026-09-29 by Vincent: ssh from pi-login to a node asks to accept the node's host key, once
+per node name, although every node has the same key (5.9); how to make ssh between pi-login and
+the nodes easy? Facts (manpages.debian.org, trixie, 2026-09-29): the ssh client also reads the
+system-wide `/etc/ssh/ssh_known_hosts` (sshd(8), SSH_KNOWN_HOSTS FILE FORMAT; ssh_config(5),
+`GlobalKnownHostsFile`), whose host field is a comma-separated list of patterns with `*` and `?`;
+`HostKeyAlias` stores and looks up a host's key under another name; `StrictHostKeyChecking
+accept-new` adds new keys without asking but refuses changed ones.
+(a) The scripts write `/etc/ssh/ssh_known_hosts` on pi-login and in the image: the image's host
+keys for `pi-???` and `10.0.1.*` (from `NODE_PREFIX`, `NODE_SUBNET`), and pi-login's keys for
+`pi-login` and `10.0.0.1`. Then ssh from pi-login to any node, between nodes, and from a node to
+pi-login never asks, with the keys still checked; a rebuilt image rewrites the file. On the
+workstation, `HostKeyAlias pi-nodes` in the Readme's `Host pi-* !pi-login` block makes the nodes
+share one known-hosts entry: one question for all of them, and one `ssh-keygen -R pi-nodes` after
+an image rebuild.
+(b) `StrictHostKeyChecking accept-new` for the nodes in `/etc/ssh/ssh_config.d/`: no question on
+first contact, but after an image rebuild every user's old entries break (changed key).
+(c) No host-key checking for the nodes: simplest, and on a private LAN mostly harmless, but it
+also silences a real warning.
+Jobs that ssh between nodes need a user key with no passphrase in `~/.ssh`, since a batch job has
+no agent; `/home` is shared, so one key and one `authorized_keys` line cover every node. That is
+separate from host keys and belongs with MPI (D33).
+Default: (a).
+Answer: (a), 2026-10-04 ("Let's implement that Recommendation"), with `HostKeyAlias pi-nodes` in the
+Readme's ssh config. Implemented the same day (`known_hosts_file` in `lib.sh`, `20-netboot.sh`
+stages 4j and 5, Readme, checklist 3.15, 5.19, 5.20); not hardware-tested: another session was
+using the cluster, and Vincent said not to test yet.
+Hardware-tested 2026-10-05: 3.15, 5.19 and 5.20 pass (`ai/test-logs/2026-10-05.md`).
+
+## D41. AI statement in the Readme
+
+Asked 2026-10-04 by Vincent: the Readme must state clearly how AI was used, in the 2025 version as
+well as in this refresh. Answer (Vincent's edits, 2026-10-04): an "AI statement" section before
+References, and a pointer to it in the opening paragraph. 2025: AI chat, mainly ChatGPT, helped
+create the Python prototype. 2026: Claude Code with the Claude Fable, Opus and Sonnet models of
+September and October 2026 (named by family, since a new Sonnet came out during the work)
+reviewed the old version, planned the rewrite, wrote the scripts and most of the Readme, and
+looked up facts with their sources; every design decision was approved before implementation and
+every step run on the hardware. Photos: original; the first one retouched with AI. Declarative
+throughout, no first person (Vincent). The public repo starts without the private history (D29),
+so the statement describes the process instead of pointing at commits.
+
+## D42. The Readme review
+
+A fresh-eyes review of the Readme by a separate Fable chat, 2026-10-04 (prompt: a clear, concise,
+encouraging Readme for a moderately technical reader; dry, declarative, no first person). Its 25
+findings checked out against the scripts; all applied on 2026-10-04, with these changes and
+Vincent's answers to its questions:
+- The Maintenance row "Copy the card to the NVMe again" was wrong: section 4 rewrites the only
+  card as the bootloader card, and that card in the head node would set it to boot from the
+  network instead of its NVMe (the Network Boot image writes `BOOT_ORDER=0xf21`, Phase 1 plan
+  F5). Now "Start over from a blank card" (Vincent: yes), without `--force`: a new card's system
+  is not a finished copy, so `10-nvme.sh` asks before erasing.
+- Nodes are switched off by unplugging (they keep nothing locally); `sudo` on a node needs a
+  password, so `ssh pi-001 sudo poweroff` as suggested would fail without `-t`.
+- Other addresses: "another private range", no example (Vincent: anyone changing ranges knows
+  enough). The scripts derive every address from `cluster.env`; nothing in `head/` hard-codes 10.x.
+- The bootloader card takes less than 30 seconds (Vincent). `25-slurm.sh` takes a few minutes.
+- `.gitattributes` (`* text=auto eol=lf`, images binary) keeps LF on Windows clones (Vincent:
+  yes); added to the public file list in `CLAUDE.md` and the handoff's `git archive` line.
+- The image's copy of `/etc/shadow` is stated in the Security note; no design change now
+  (Vincent). Open for later: whether nodes need sudo at all.
+- "The author approved every design decision…" in the AI statement, and the sentence-case title
+  (Vincent: yes).
+- munge moved to "Running jobs" rather than cut: readers of other Slurm guides look for it.
+
+## D43. One public repository, history included
+
+Asked 2026-10-05 by Vincent: is a fresh public repository (D29) needed, given what it leaves
+behind? Claude's assessment: no version of any file holds a secret and no committed image carries
+metadata; the personal details are mild (his email in commit metadata, approved in D11; his other
+project's and VM's names; board sources; a local path; quoted chat remarks). Two repositories
+would mean an export for every update. Vincent, 2026-10-05: the names and quotes are fine in
+public; collaborators view for now, contributions later unclear; he creates a public
+`vincentl/pi-cluster`, pushes this repository to it, history included, and deletes the private
+`pi-cluster-dev`. Replaces D29's fresh repository with public files only. So the Readme may now
+link to `ai/` (from the AI statement) and to `docs/testing.md` (from section 5), and `CLAUDE.md`
+drops the public-files rule. Vincent pushes to GitHub himself.
+

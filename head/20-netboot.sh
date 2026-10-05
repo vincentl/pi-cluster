@@ -126,7 +126,7 @@ systemctl --root="$IMAGE" --quiet mask userconfig.service regenerate_ssh_host_ke
 systemctl --root="$IMAGE" --quiet disable rpcbind.service rpcbind.socket
 systemctl --root="$IMAGE" --quiet enable ssh.service getty@tty1.service
 
-# 4j. ssh: host keys made once and shared by every node; public-key logins only, as on the head node; no first-boot banner.
+# 4j. ssh: host keys made once and shared by every node, known with pi-login's; public-key logins only, as on the head node; no first-boot banner.
 [[ -e $IMAGE/etc/ssh/ssh_host_ed25519_key ]] || image_run ssh-keygen -A
 if [[ -e $IMAGE/etc/ssh/sshd_config.d/rename_user.conf ]]; then
     rm "$IMAGE/etc/ssh/sshd_config.d/rename_user.conf"
@@ -136,6 +136,7 @@ put "$IMAGE/etc/ssh/sshd_config.d/pi-cluster.conf" <<EOF
 $GENERATED
 PasswordAuthentication no
 EOF
+put "$IMAGE/etc/ssh/ssh_known_hosts" < <(known_hosts_file)
 
 # 4k. Time from the head node, eth0 left to the kernel, swap in RAM only (the default swap file would sit in /var).
 put "$IMAGE/etc/systemd/timesyncd.conf.d/pi-cluster.conf" <<EOF
@@ -187,12 +188,13 @@ fi
 mkdir -p "$IMAGE/var/lib/dbus"
 ln -sfn /etc/machine-id "$IMAGE/var/lib/dbus/machine-id"
 
-# 5. Head node services: cloud-init off (it rewrites /etc/hosts at every boot), names, DHCP and TFTP, time.
+# 5. Head node services: cloud-init off (it rewrites /etc/hosts at every boot), names and known hosts, DHCP and TFTP, time.
 if [[ -d /etc/cloud && ! -e /etc/cloud/cloud-init.disabled ]]; then
     touch /etc/cloud/cloud-init.disabled
     log "turned off cloud-init on the head node"
 fi
 put /etc/hosts < <(hosts_file)
+put /etc/ssh/ssh_known_hosts < <(known_hosts_file)
 [[ -e $NODES ]] || put "$NODES" <<EOF
 # pi-cluster node registry, created by head/20-netboot.sh and appended to by head/30-add-node.sh.
 # One dnsmasq dhcp-host line per compute node, MAC,IP,NAME  # serial XXXXXXXX

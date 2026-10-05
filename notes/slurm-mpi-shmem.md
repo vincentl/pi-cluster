@@ -1,6 +1,8 @@
 # Slurm, MPI and OpenSHMEM working notes
 
-Raw notes moved out of the old Readme on 2026-09-22. Not yet scripted; `head/40-slurm.sh` is the planned home.
+Raw notes moved out of the old Readme on 2026-09-22, kept for the record. Slurm is now set up by
+`head/25-slurm.sh`, with Slurm's own authentication instead of munge; the MPI and OpenSHMEM parts
+are not scripted.
 Commands were run by hand on the head node (`/image/pi5` is the compute image). Not a procedure.
 
 ```bash

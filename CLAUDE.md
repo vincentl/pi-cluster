@@ -23,11 +23,9 @@ change the Readme in the same commit and say so.
   `image-run.sh` runs a command inside the compute image with systemd-nspawn.
 - `notes/`: working notes not yet turned into scripts.
 - `docs/`: `images/` with its figure list, `testing.md` hardware checklist.
-- `.github/workflows/`: `make check` on push. Remote `origin` is the private
-  `github.com/vincentl/pi-cluster-dev` (D29). A public `vincentl/pi-cluster` comes near the end
-  and gets only the public files: `Readme.md`, `LICENSE`, `cluster.env`, `head/`, the figures in
-  `docs/images/`, `Makefile`, `.shellcheckrc`, `.github/`, `.gitignore`. Public files never link
-  to the private ones (`ai/`, `notes/`, `docs/testing.md`, `CLAUDE.md`, `docs/images/README.md`).
+- `.github/workflows/`: `make check` on push. Remote `origin` is the public
+  `github.com/vincentl/pi-cluster`: the whole repository, history included, `ai/` and `notes/`
+  too (D43). It replaced the private `pi-cluster-dev` (D29).
 - `ai/`: prompts, audits, decisions, plans and test logs for Claude sessions. Start at `ai/README.md`.
 
 ## Conventions
@@ -60,4 +58,4 @@ a human following `docs/testing.md`; results go in `ai/test-logs/`.
 - Don't assert Raspberry Pi bootloader, Imager, or Debian trixie behaviour from memory.
   Fetch the doc or package page and cite it in the plan file.
 - Don't commit downloaded images or anything from `~/.ssh`.
-- Don't push without Vincent's OK, and never force-push.
+- Don't push: Vincent pushes to GitHub himself. Never force-push.

@@ -1,0 +1,4 @@
+# Keep LF line endings on every checkout, Windows included: bash on the Pi rejects CRLF.
+* text=auto eol=lf
+*.jpg binary
+*.png binary
